@@ -15,20 +15,6 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { DomioLogo } from "@/components/DomioLogo";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import type { AppRole } from "@/types/database";
-
-const ROLES: { value: AppRole; label: string }[] = [
-  { value: "manager", label: "Manager" },
-  { value: "owner", label: "Owner" },
-  { value: "tenant", label: "Tenant" },
-];
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -36,7 +22,6 @@ export default function SignUpPage() {
   const [name, setName] = useState("");
   const [surname, setSurname] = useState("");
   const [phone, setPhone] = useState("");
-  const [role, setRole] = useState<AppRole>("owner");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -62,7 +47,7 @@ export default function SignUpPage() {
         surname,
         phone: phone || null,
         email,
-        role,
+        role: "owner",
       });
       if (profileError) {
         setError(profileError.message);
@@ -71,8 +56,7 @@ export default function SignUpPage() {
       }
     }
     setLoading(false);
-    const dashboard = role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
-    window.location.href = dashboard;
+    window.location.href = "/dashboard/owner";
   }
 
   return (
@@ -142,21 +126,6 @@ export default function SignUpPage() {
               required
               autoComplete="new-password"
             />
-          </div>
-          <div className="space-y-2">
-            <Label>Role</Label>
-            <Select value={role} onValueChange={(v) => setRole(v as AppRole)}>
-              <SelectTrigger className="w-full">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {ROLES.map((r) => (
-                  <SelectItem key={r.value} value={r.value}>
-                    {r.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
           </div>
         </CardContent>
         <CardFooter className="flex flex-col gap-3">
