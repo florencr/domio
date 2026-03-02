@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DomioLogo } from "@/components/DomioLogo";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -26,22 +27,26 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     const supabase = createClient();
-    const { error: err } = await supabase.auth.signInWithPassword({
+    const { data, error: err } = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    setLoading(false);
     if (err) {
+      setLoading(false);
       setError(err.message);
       return;
     }
-    window.location.href = "/";
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+    const role = profile?.role;
+    const dashboard = role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+    setLoading(false);
+    window.location.href = dashboard;
   }
 
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>Domio</CardTitle>
+        <CardTitle className="flex justify-center"><DomioLogo className="h-9 w-auto" /></CardTitle>
         <CardDescription>Sign in to your account</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

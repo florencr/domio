@@ -9,19 +9,22 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import Link from "next/link";
 import { LogOut, Settings, User, FileText } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
+import { DomioLogo } from "@/components/DomioLogo";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null; avatar_url?: string | null };
 type Building = { id: string; name: string; address: string; manager_id?: string | null };
 type Unit = { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance: string | null; floor: string | null };
 type Service = { id: string; name: string; unit_type: string; pricing_model: string; price_value: number; frequency: string; category?: string | null };
-type Expense = { id: string; title: string; category: string; vendor: string; amount: number; frequency: string; created_at?: string | null; paid_at?: string | null; period_month?: number | null; period_year?: number | null; template_id?: string | null };
+type Expense = { id: string; title: string; category: string; vendor: string; amount: number; frequency: string; created_at?: string | null; paid_at?: string | null; period_month?: number | null; period_year?: number | null; template_id?: string | null; reference_code?: string | null };
 type UnitType = { id: string; name: string };
 type Vendor = { id: string; name: string };
 type ServiceCategory = { id: string; name: string };
-type Bill = { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null };
+type Bill = { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null; reference_code?: string | null };
 type UnitOwner = { unit_id: string; owner_id: string };
 type UnitTenantAssignment = { unit_id: string; tenant_id: string; is_payment_responsible?: boolean };
 
@@ -40,6 +43,17 @@ const EMPTY: Data = {
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+function expenseRef(e: { title?: string; category?: string; period_month?: number | null; period_year?: number | null }) {
+  const src = e.title || e.category || "EXP";
+  const code = src.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 3) || "EXP";
+  if (e.period_month != null && e.period_year != null) {
+    const mon = MONTHS[e.period_month - 1].slice(0, 3).toUpperCase();
+    const yr = String(e.period_year % 100).padStart(2, "0");
+    return `EXP-${code}-${mon}${yr}`;
+  }
+  return `EXP-${code}`;
+}
 
 // ─── Send Notification Form ─────────────────────────────────────────────
 function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitType[]; onClose: () => void }) {
@@ -159,7 +173,7 @@ export default function ManagerPage() {
       sb.from("unit_types").select("id,name"),
       sb.from("vendors").select("id,name"),
       sb.from("service_categories").select("id,name"),
-      sb.from("bills").select("id,unit_id,period_month,period_year,total_amount,status,paid_at,receipt_url,receipt_filename,receipt_path").order("period_year",{ascending:false}).order("period_month",{ascending:false}).limit(200),
+      sb.from("bills").select("id,unit_id,period_month,period_year,total_amount,status,paid_at,receipt_url,receipt_filename,receipt_path,reference_code").order("period_year",{ascending:false}).order("period_month",{ascending:false}).limit(200),
       sb.from("unit_owners").select("unit_id,owner_id"),
       sb.from("unit_tenant_assignments").select("unit_id,tenant_id,is_payment_responsible"),
     ]);
@@ -205,14 +219,28 @@ export default function ManagerPage() {
       {showSendNotif && <SendNotificationForm unitTypes={data.unitTypes} onClose={() => setShowSendNotif(false)} />}
       <header className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-xl font-bold">Domio</h1>
-          <p className="text-xs text-muted-foreground">Manager Dashboard</p>
+          <Link href="/dashboard/manager" className="flex items-center gap-2">
+            <DomioLogo className="h-9 w-auto" />
+            <span className="text-xs text-muted-foreground">Manager</span>
+          </Link>
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell isManager onSendClick={() => { setTab("config"); setConfigSubTab("notifications"); setShowSendNotif(false); }} />
-          <span className="flex items-center gap-1 text-sm text-muted-foreground px-2 py-1 rounded-md bg-background border">
-            <User className="size-3.5" />{profile?.name} {profile?.surname}
-          </span>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <User className="size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="p-3 space-y-2">
+                <p className="font-semibold">{profile?.name} {profile?.surname}</p>
+                <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
+                <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={() => setTab("config")} title="Configuration"><Settings className="size-5" /></Button>
           <Button variant="outline" size="sm" onClick={signOut}><LogOut className="size-4 mr-1" />Logout</Button>
         </div>
@@ -245,7 +273,7 @@ export default function ManagerPage() {
           <TabsTrigger value="ledger">Ledger</TabsTrigger>
           <TabsTrigger value="config">Config ⚙</TabsTrigger>
         </TabsList>
-        <TabsContent value="billing"><BillingTab data={data} reload={load} /></TabsContent>
+        <TabsContent value="billing"><BillingTab data={data} reload={load} addBills={newBills => setData(prev => ({ ...prev, bills: [...(prev.bills || []), ...newBills] }))} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab data={data} reload={load} /></TabsContent>
         <TabsContent value="payments"><PaymentsTab bills={data.bills} units={data.units} profiles={data.profiles} unitOwners={data.unitOwners} /></TabsContent>
         <TabsContent value="ledger"><LedgerTab bills={data.bills} expenses={data.expenses} units={data.units} /></TabsContent>
@@ -256,7 +284,7 @@ export default function ManagerPage() {
 }
 
 // ─── Billing Tab ─────────────────────────────────────────────────────────
-function BillingTab({ data, reload }: { data: Data; reload: () => void }) {
+function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void; addBills?: (bills: Bill[]) => void }) {
   const [month, setMonth] = useState(String(new Date().getMonth() + 1));
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
@@ -275,38 +303,46 @@ function BillingTab({ data, reload }: { data: Data; reload: () => void }) {
   async function generate() {
     setGenerating(true);
     setMsg({text:"",ok:true});
-    const sb = createClient();
-    const m = parseInt(month), y = parseInt(year);
+    try {
+      const sb = createClient();
+      const m = parseInt(month), y = parseInt(year);
 
-    const existing = await sb.from("bills").select("unit_id").eq("period_month", m).eq("period_year", y);
-    const done = new Set((existing.data ?? []).map((b: {unit_id:string}) => b.unit_id));
-    const toProcess = data.units.filter(u => !done.has(u.id));
-    if (!toProcess.length) { setMsg({text:"Bills already generated for this period.",ok:false}); setGenerating(false); return; }
+      const existing = await sb.from("bills").select("unit_id").eq("period_month", m).eq("period_year", y);
+      const done = new Set((existing.data ?? []).map((b: {unit_id:string}) => b.unit_id));
+      const toProcess = data.units.filter(u => !done.has(u.id));
+      if (!toProcess.length) { setMsg({text:"Bills already generated for this period.",ok:false}); setGenerating(false); return; }
 
-    // Recurrent templates = template_id null, period null (definitions in Config)
-    const recurrentTemplates = data.expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
-    // Generate expense records for this period (if not already)
-    for (const t of recurrentTemplates) {
-      const existing = await sb.from("expenses").select("id").eq("template_id", t.id).eq("period_month", m).eq("period_year", y).limit(1);
-      if (!(existing.data?.length)) {
-        await sb.from("expenses").insert({ title: t.title, category: t.category, vendor: t.vendor, amount: t.amount, frequency: "recurrent", template_id: t.id, period_month: m, period_year: y });
+      // Recurrent templates = template_id null, period null (definitions in Config)
+      const recurrentTemplates = data.expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
+      // Generate expense records for this period (if not already)
+      for (const t of recurrentTemplates) {
+        const existingExp = await sb.from("expenses").select("id").eq("template_id", t.id).eq("period_month", m).eq("period_year", y).limit(1);
+        if (!(existingExp.data?.length)) {
+          const ins = await sb.from("expenses").insert({ title: t.title, category: t.category, vendor: t.vendor, amount: t.amount, frequency: "recurrent", template_id: t.id, period_month: m, period_year: y }).select();
+          if (ins.error) { setMsg({text: ins.error.message || "Failed to create expense record", ok: false}); setGenerating(false); return; }
+        }
       }
-    }
-    // Bills = services only (no shared expenses in unit bills)
-    const recurrentServices = data.services.filter(s => s.frequency === "recurrent");
-    const rows = toProcess.map(unit => {
-      const unitServices = recurrentServices.filter(s => s.unit_type === unit.type);
-      const servicesTotal = unitServices.reduce((s, svc) => {
-        if (svc.pricing_model === "per_m2" && unit.size_m2) return s + Number(svc.price_value) * Number(unit.size_m2);
-        return s + Number(svc.price_value);
-      }, 0);
-      return { unit_id: unit.id, period_month: m, period_year: y, total_amount: Math.round(servicesTotal * 100) / 100, status: "draft" };
-    });
+      // Bills = services only (no shared expenses in unit bills)
+      const recurrentServices = data.services.filter(s => s.frequency === "recurrent");
+      const rows = toProcess.map(unit => {
+        const unitServices = recurrentServices.filter(s => s.unit_type === unit.type);
+        const servicesTotal = unitServices.reduce((s, svc) => {
+          if (svc.pricing_model === "per_m2" && unit.size_m2) return s + Number(svc.price_value) * Number(unit.size_m2);
+          return s + Number(svc.price_value);
+        }, 0);
+        return { unit_id: unit.id, period_month: m, period_year: y, total_amount: Math.round(servicesTotal * 100) / 100, status: "draft" };
+      });
 
-    await sb.from("bills").insert(rows);
-    setMsg({text:`✓ Generated ${rows.length} bill${rows.length>1?"s":""}. Services + shared expenses calculated.`,ok:true});
+      const insBills = await sb.from("bills").insert(rows).select();
+      if (insBills.error) { setMsg({text: insBills.error.message || "Failed to create bills", ok: false}); setGenerating(false); return; }
+      const inserted = (insBills.data ?? []) as Bill[];
+      if (addBills && inserted.length) addBills(inserted);
+      setMsg({text:`✓ Generated ${rows.length} bill${rows.length>1?"s":""}.`,ok:true});
+      await reload();
+    } catch (err) {
+      setMsg({text: (err as Error).message || "An error occurred", ok: false});
+    }
     setGenerating(false);
-    reload();
   }
 
   async function markPaid(id: string) {
@@ -371,6 +407,7 @@ function BillingTab({ data, reload }: { data: Data; reload: () => void }) {
           <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b text-left">
+                <th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground">Building</th>
@@ -391,6 +428,7 @@ function BillingTab({ data, reload }: { data: Data; reload: () => void }) {
                 const billTo = billToId ? profileMap.get(billToId) : null;
                 return (
                   <tr key={b.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
                     <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
                     <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
@@ -419,7 +457,7 @@ function BillingTab({ data, reload }: { data: Data; reload: () => void }) {
                   </tr>
                 );
               })}
-              {!data.bills.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No bills yet. Generate bills above.</td></tr>}
+              {!data.bills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">No bills yet. Generate bills above.</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -577,10 +615,11 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
         <CardHeader><CardTitle>All Expenses ({displayExpenses.length})</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Title</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Category</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Vendor</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Recurrent / Ad-hoc</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Title</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Category</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Vendor</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Recurrent / Ad-hoc</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
             <tbody className="divide-y divide-border">
               {displayExpenses.map(e => (
                 <tr key={e.id} className="hover:bg-muted/30">
+                  <td className="py-3 pr-4 font-mono text-xs">{e.reference_code ?? expenseRef(e)}</td>
                   <td className="py-3 pr-4 text-muted-foreground">
                     {e.period_month != null && e.period_year != null ? `${MONTHS[e.period_month-1]} ${e.period_year}` : (e.frequency === "recurrent" ? "Monthly" : (e.created_at ? new Date(e.created_at).toLocaleDateString("en-GB", { month: "short", year: "numeric" }) : "—"))}
                   </td>
@@ -605,7 +644,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                   </td>
                 </tr>
               ))}
-              {!displayExpenses.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No expenses. Generate recurrent or record ad-hoc above. Define templates in Configuration.</td></tr>}
+              {!displayExpenses.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No expenses. Generate recurrent or record ad-hoc above. Define templates in Configuration.</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -631,7 +670,7 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
         <CardHeader><CardTitle>Payment History ({paid.length})</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid On</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Owner</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 font-medium text-muted-foreground text-right">Amount</th></tr></thead>
+            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid On</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Owner</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 font-medium text-muted-foreground text-right">Amount</th></tr></thead>
             <tbody className="divide-y divide-border">
               {paid.map(b => {
                 const unit = unitMap.get(b.unit_id);
@@ -639,6 +678,7 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
                 const owner = ownerId ? profileMap.get(ownerId) : null;
                 return (
                   <tr key={b.id} className="hover:bg-muted/30">
+                    <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
                     <td className="py-3 pr-4 font-medium">{new Date(b.paid_at!).toLocaleDateString()}</td>
                     <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : "—"}</td>
@@ -647,7 +687,7 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
                   </tr>
                 );
               })}
-              {!paid.length && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No payments yet.</td></tr>}
+              {!paid.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No payments yet.</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -661,11 +701,11 @@ function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expens
   const unitMap = new Map(units.map(u => [u.id, u.unit_name]));
 
   // Combine and sort by period/date newest first
-  type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; amount: number; status: string };
+  type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; ref: string; amount: number; status: string };
   const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTHS[parseInt(m||"1")-1]} ${y}`; };
   const rows: LedgerRow[] = [
-    ...bills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
-    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, amount: Number(e.amount), status: e.paid_at ? "Paid" : e.frequency })),
+    ...bills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: b.reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
+    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: e.reference_code ?? expenseRef(e), amount: Number(e.amount), status: e.paid_at ? "Paid" : e.frequency })),
   ].sort((a,b) => b.date.localeCompare(a.date));
 
   let running = 0;
@@ -685,10 +725,11 @@ function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expens
         <CardHeader><CardTitle>Full Ledger ({rows.length} entries)</CardTitle></CardHeader>
         <CardContent className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
+            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
             <tbody className="divide-y divide-border">
               {rowsWithBalance.map(r => (
                 <tr key={r.key} className="hover:bg-muted/30">
+                  <td className="py-3 pr-4 font-mono text-xs">{r.ref}</td>
                   <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                   <td className="py-3 pr-4">
                     {r.type === "income"
@@ -703,7 +744,7 @@ function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expens
                   <td className={`py-3 text-right font-mono text-sm ${r.balance>=0?"text-blue-600":"text-red-600"}`}>{r.balance.toFixed(2)}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
+              {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
             </tbody>
           </table>
         </CardContent>
@@ -713,6 +754,7 @@ function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expens
 }
 
 // ─── Notifications Config (full-screen form for mobile) ─────────────────────
+type SentNotification = { id: string; title: string; body: string | null; created_at: string; target_audience: string; recipients: number };
 function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack: () => void }) {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
@@ -721,6 +763,20 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
   const [unpaidOnly, setUnpaidOnly] = useState(false);
   const [sending, setSending] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
+  const [sentLog, setSentLog] = useState<SentNotification[]>([]);
+  const [logLoading, setLogLoading] = useState(false);
+
+  const loadSent = async () => {
+    setLogLoading(true);
+    const res = await fetch("/api/notifications/sent", { cache: "no-store" });
+    const json = await res.json().catch(() => ({}));
+    setSentLog(json.notifications ?? []);
+    setLogLoading(false);
+  };
+
+  useEffect(() => {
+    loadSent();
+  }, []);
 
   const toggleUnitType = (name: string) => {
     setSelectedUnitTypes(prev => prev.includes(name) ? prev.filter(x => x !== name) : [...prev, name]);
@@ -744,8 +800,11 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
     const json = await res.json().catch(() => ({}));
     setSending(false);
     if (res.ok && json.success) {
-      setMsg({ text: `Sent to ${json.recipients ?? 0} recipients`, ok: true });
-      setTimeout(() => { setTitle(""); setBody(""); setSelectedUnitTypes([]); setUnpaidOnly(false); onBack(); }, 800);
+      const count = json.recipients ?? 0;
+      setMsg({ text: count > 0 ? `Sent to ${count} recipients` : "Notification saved. No recipients found — add owners/tenants in Config > Units.", ok: true });
+      loadSent();
+      setTitle(""); setBody(""); setSelectedUnitTypes([]); setUnpaidOnly(false);
+      if (count > 0) setTimeout(() => onBack(), 800);
     } else {
       setMsg({ text: json.error || "Failed to send", ok: false });
     }
@@ -754,7 +813,8 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
   return (
     <div className="flex flex-col w-full min-h-[calc(100vh-16rem)] md:min-h-[420px]">
       <div className="flex-1 overflow-y-auto pb-24">
-        <div className="space-y-4 max-w-md">
+        <div className="space-y-6 w-full">
+          <div className="space-y-4 max-w-md">
           <div>
             <Label>Title</Label>
             <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Payment reminder" className="mt-1 w-full" />
@@ -792,6 +852,44 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
             <Label htmlFor="unpaid-cfg" className="cursor-pointer">Only users with unpaid bills</Label>
           </div>
           {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+          </div>
+          <Card className="w-full">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">Notifications sent</CardTitle>
+              <p className="text-xs text-muted-foreground">Log of all notifications you have sent.</p>
+            </CardHeader>
+            <CardContent className="w-full px-4 pb-4 pt-0 md:p-6">
+              {logLoading ? (
+                <p className="text-sm text-muted-foreground py-4 px-4">Loading...</p>
+              ) : (
+                <div className="overflow-x-auto w-full">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b bg-muted/40">
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Date</th>
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Title</th>
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Message</th>
+                        <th className="px-4 py-3 text-left font-medium text-muted-foreground">Audience</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Recipients</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border">
+                      {sentLog.map(n => (
+                        <tr key={n.id} className="hover:bg-muted/20">
+                          <td className="px-4 py-3 text-muted-foreground whitespace-nowrap">{n.created_at ? new Date(n.created_at).toLocaleString() : "—"}</td>
+                          <td className="px-4 py-3 font-medium">{n.title}</td>
+                          <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]" title={n.body ?? ""}>{n.body ?? "—"}</td>
+                          <td className="px-4 py-3 capitalize">{n.target_audience}</td>
+                          <td className="px-4 py-3 text-right font-medium">{n.recipients}</td>
+                        </tr>
+                      ))}
+                      {sentLog.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No notifications sent yet.</td></tr>}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
       </div>
       <div className="fixed bottom-0 left-0 right-0 md:relative md:mt-4 p-4 bg-background border-t md:border-t-0 flex gap-2 justify-end">
@@ -1166,11 +1264,17 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
                       <td className="px-4 py-3 text-center text-muted-foreground">{u.floor ?? <span className="text-muted-foreground/30">—</span>}</td>
                       <td className="px-4 py-3">
                         {owner
-                          ? <div className="flex items-center gap-2"><Avatar profile={owner} /><span className="text-sm">{owner.name} {owner.surname}</span></div>
+                          ? <div className="flex items-center gap-2 flex-wrap"><Avatar profile={owner} /><span className="text-sm">{owner.name} {owner.surname}</span></div>
                           : <span className="text-xs text-muted-foreground/50">No owner</span>}
                       </td>
                       <td className="px-4 py-3">
-                        {(() => { const tid = tenantMap.get(u.id); const tenant = tid ? profileMap.get(tid) : null; return tenant ? <span className="text-sm">{tenant.name} {tenant.surname}</span> : <span className="text-xs text-muted-foreground/50">—</span>; })()}
+                        {(() => {
+                          const tid = tenantMap.get(u.id);
+                          const tenant = tid ? profileMap.get(tid) : null;
+                          return tenant
+                            ? <div className="flex items-center gap-2 flex-wrap"><Avatar profile={tenant} /><span className="text-sm">{tenant.name} {tenant.surname}</span></div>
+                            : <span className="text-xs text-muted-foreground/50">—</span>;
+                        })()}
                       </td>
                       <td className="px-4 py-3">
                         <Button size="sm" variant={isActive?"default":"ghost"} className="h-7 px-3 text-xs"

@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { DomioLogo } from "@/components/DomioLogo";
 import {
   Select,
   SelectContent,
@@ -70,13 +71,14 @@ export default function SignUpPage() {
       }
     }
     setLoading(false);
-    window.location.href = "/";
+    const dashboard = role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+    window.location.href = dashboard;
   }
 
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle>Domio</CardTitle>
+        <CardTitle className="flex justify-center"><DomioLogo className="h-9 w-auto" /></CardTitle>
         <CardDescription>Create your account</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

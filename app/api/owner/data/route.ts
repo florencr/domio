@@ -56,7 +56,7 @@ export async function GET(request: Request) {
       admin.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
       admin.from("units").select("id, unit_name"),
       admin.from("buildings").select("id, name"),
-      sb.from("bills").select("id, unit_id, period_month, period_year, total_amount, status, paid_at, receipt_url, receipt_filename, receipt_path").order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(500),
+      sb.from("bills").select("id, unit_id, period_month, period_year, total_amount, status, paid_at, receipt_url, receipt_filename, receipt_path, reference_code").order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(500),
       admin.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
       admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds),
       admin.from("profiles").select("id, name, surname, email").eq("role", "tenant"),

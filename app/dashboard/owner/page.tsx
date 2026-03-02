@@ -1,17 +1,20 @@
 "use client";
 
 import { useEffect, useState, useRef } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, User, Camera, FileText, AlertTriangle } from "lucide-react";
-import { NotificationBell } from "@/components/NotificationBell";
+import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
+import { DomioLogo } from "@/components/DomioLogo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 type OwnerData = {
-  profile: { id: string; name: string; surname: string; email: string; role: string } | null;
+  profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
   units: { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string }[];
   allUnits: { id: string; unit_name: string }[];
   buildings: { id: string; name: string }[];
@@ -23,11 +26,23 @@ type OwnerData = {
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
+function expenseRef(e: { title?: string; category?: string; period_month?: number | null; period_year?: number | null }) {
+  const src = e.title || e.category || "EXP";
+  const code = src.replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 3) || "EXP";
+  if (e.period_month != null && e.period_year != null) {
+    const mon = MONTHS[e.period_month - 1].slice(0, 3).toUpperCase();
+    const yr = String(e.period_year % 100).padStart(2, "0");
+    return `EXP-${code}-${mon}${yr}`;
+  }
+  return `EXP-${code}`;
+}
+
 export default function OwnerPage() {
   const router = useRouter();
   const [data, setData] = useState<OwnerData>({ profile: null, units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [], tenants: [] });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("billing");
+  const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +53,7 @@ export default function OwnerPage() {
     if (!user) { router.push("/login"); return; }
 
     const [profileRes, unitOwnersRes] = await Promise.all([
-      sb.from("profiles").select("id, name, surname, email, role").eq("id", user.id).single(),
+      sb.from("profiles").select("id, name, surname, email, role, phone").eq("id", user.id).single(),
       sb.from("unit_owners").select("unit_id").eq("owner_id", user.id),
     ]);
     const profile = profileRes.data;
@@ -77,6 +92,13 @@ export default function OwnerPage() {
   };
 
   useEffect(() => { load(); }, []);
+
+  const loadNotifications = async () => {
+    const res = await fetch("/api/notifications", { cache: "no-store" });
+    const json = await res.json().catch(() => ({}));
+    setNotifications(json.notifications ?? []);
+  };
+  useEffect(() => { if (tab === "notifications") loadNotifications(); }, [tab]);
 
   async function handleSignOut() {
     await createClient().auth.signOut();
@@ -132,11 +154,11 @@ export default function OwnerPage() {
   const monthlyExpenses = expenseRecords.reduce((s, e) => s + Number(e.amount), 0);
   const netFund = collected - monthlyExpenses;
 
-  type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; amount: number; status: string };
+  type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; ref: string; amount: number; status: string };
   const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTHS[parseInt(m||"1")-1]} ${y}`; };
   const ledgerRows: LedgerRow[] = [
-    ...myBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
-    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, amount: Number(e.amount), status: "Recurrent" })),
+    ...myBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)?.unit_name ?? "—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: (b as {reference_code?: string}).reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
+    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: (e as {reference_code?: string}).reference_code ?? expenseRef(e), amount: Number(e.amount), status: "Recurrent" })),
   ].sort((a,b) => b.date.localeCompare(a.date));
   let running = 0;
   const rowsWithBalance = [...ledgerRows].reverse().map(r => { running += r.type === "income" ? r.amount : -r.amount; return {...r, balance: running}; }).reverse();
@@ -167,14 +189,32 @@ export default function OwnerPage() {
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
       <input type="file" ref={fileInputRef} accept="image/*,.pdf" capture="environment" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; const bid = (fileInputRef.current as HTMLInputElement & { _billId?: string })?._billId; if (f && bid) uploadSlip(bid, f); e.target.value = ""; }} />
-      <header className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-bold">Domio · Owner</h1>
-        <div className="flex items-center gap-2">
+      <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
+        <Link href="/dashboard/owner" className="flex items-center">
+          <DomioLogo className="h-9 w-auto" />
+          <span className="ml-2 text-sm text-muted-foreground font-normal hidden sm:inline">Owner</span>
+        </Link>
+        <div className="flex items-center gap-2 md:gap-2">
           <NotificationBell />
-          <span className="flex items-center gap-1 text-sm text-muted-foreground px-2 py-1 rounded-md bg-background border">
-            <User className="size-3.5" /> {profile?.name} {profile?.surname}
-          </span>
-          <Button variant="outline" size="sm" onClick={handleSignOut}><LogOut className="size-4 mr-1" /> Logout</Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon">
+                <User className="size-5" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-64">
+              <div className="p-3 space-y-2">
+                <p className="font-semibold">{profile?.name} {profile?.surname}</p>
+                <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
+                <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
+              </div>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden md:inline-flex"><LogOut className="size-4 mr-1" /> Logout</Button>
+          <Button variant="ghost" size="icon" onClick={handleSignOut} className="md:hidden" title="Log out">
+            <LogOut className="size-5" />
+          </Button>
         </div>
       </header>
 
@@ -207,12 +247,23 @@ export default function OwnerPage() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-3 max-w-xl mb-2">
-          <TabsTrigger value="units">My Units</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-        </TabsList>
-
+        <div className="hidden md:block mb-2">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+            <TabsTrigger value="units">My Units</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="ledger">Ledger</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-2">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="units">My Units</TabsTrigger>
+            <TabsTrigger value="billing">Billing</TabsTrigger>
+            <TabsTrigger value="ledger">Ledger</TabsTrigger>
+            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="pb-20 md:pb-0">
         <TabsContent value="units">
           <div className="space-y-4 mt-2">
             <Card>
@@ -274,13 +325,14 @@ export default function OwnerPage() {
               <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle></CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[500px]">
-                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
                   <tbody className="divide-y divide-border">
                     {myBills.map(b => {
                       const respId = unitResponsibleTenantMap.get(b.unit_id);
                       const respTenant = respId ? tenantMap.get(respId) : null;
                       return (
                       <tr key={b.id} className="hover:bg-muted/30">
+                        <td className="py-3 pr-4 font-mono text-xs">{(b as {reference_code?: string}).reference_code ?? "—"}</td>
                         <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
                         <td className="py-3 pr-4">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
                         <td className="py-3 pr-4 text-muted-foreground">{respTenant ? `${respTenant.name} ${respTenant.surname}` : "—"}</td>
@@ -303,7 +355,7 @@ export default function OwnerPage() {
                         </td>
                       </tr>
                     ); })}
-                    {!myBills.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
+                    {!myBills.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
                   </tbody>
                 </table>
               </CardContent>
@@ -316,10 +368,11 @@ export default function OwnerPage() {
             <CardHeader><CardTitle>Full Ledger ({ledgerRows.length} entries)</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
-                <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
+                <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
                 <tbody className="divide-y divide-border">
                   {rowsWithBalance.map(r => (
                     <tr key={r.key} className="hover:bg-muted/30">
+                      <td className="py-3 pr-4 font-mono text-xs">{r.ref}</td>
                       <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                       <td className="py-3 pr-4">
                         {r.type === "income" ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Bill</span> : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Expense</span>}
@@ -330,12 +383,37 @@ export default function OwnerPage() {
                       <td className={`py-3 text-right font-mono text-sm ${r.balance>=0?"text-blue-600":"text-red-600"}`}>{r.balance.toFixed(2)}</td>
                     </tr>
                   ))}
-                  {!ledgerRows.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
+                  {!ledgerRows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
                 </tbody>
               </table>
             </CardContent>
           </Card>
         </TabsContent>
+
+        <TabsContent value="notifications">
+          <Card className="mt-2">
+            <CardHeader><CardTitle>Notifications ({notifications.length})</CardTitle></CardHeader>
+            <CardContent>
+              {notifications.length === 0 ? (
+                <p className="py-8 text-center text-muted-foreground">No notifications.</p>
+              ) : (
+                <div className="space-y-2">
+                  {notifications.map(n => (
+                    <div
+                      key={n.recipientId}
+                      className={`p-4 rounded-lg border ${!n.readAt ? "bg-blue-50 dark:bg-blue-950/30 border-blue-200" : "bg-muted/20"}`}
+                    >
+                      <p className="font-medium">{n.title}</p>
+                      {n.body && <p className="text-sm text-muted-foreground mt-1">{n.body}</p>}
+                      <p className="text-xs text-muted-foreground mt-2">{n.created_at ? new Date(n.created_at).toLocaleString() : ""}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+        </div>
       </Tabs>
     </div>
   );

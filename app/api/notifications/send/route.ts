@@ -35,10 +35,19 @@ export async function POST(request: Request) {
     if (audience === "owners" || audience === "both") {
       const { data: owners } = await admin.from("unit_owners").select("owner_id");
       (owners ?? []).forEach((r: { owner_id: string }) => userIds.add(r.owner_id));
+      if (userIds.size === 0) {
+        const { data: ownerProfiles } = await admin.from("profiles").select("id").eq("role", "owner");
+        (ownerProfiles ?? []).forEach((p: { id: string }) => userIds.add(p.id));
+      }
     }
     if (audience === "tenants" || audience === "both") {
-      const { data: tenants } = await admin.from("unit_tenant_assignments").select("tenant_id").or("is_payment_responsible.eq.true,is_payment_responsible.is.null");
+      const { data: tenants } = await admin.from("unit_tenant_assignments").select("tenant_id");
       (tenants ?? []).forEach((r: { tenant_id: string }) => userIds.add(r.tenant_id));
+      const hadTenantsFromAssignments = tenants && tenants.length > 0;
+      if (!hadTenantsFromAssignments) {
+        const { data: tenantProfiles } = await admin.from("profiles").select("id").eq("role", "tenant");
+        (tenantProfiles ?? []).forEach((p: { id: string }) => userIds.add(p.id));
+      }
     }
 
     if (unitTypes && unitTypes.length > 0) {
@@ -47,7 +56,7 @@ export async function POST(request: Request) {
       const filtered = new Set<string>();
       for (const uid of userIds) {
         const { data: ownerRows } = await admin.from("unit_owners").select("unit_id").eq("owner_id", uid);
-        const { data: tenantRows } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid).or("is_payment_responsible.eq.true,is_payment_responsible.is.null");
+        const { data: tenantRows } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid);
         const userUnitIds = [...(ownerRows ?? []).map((r: { unit_id: string }) => r.unit_id), ...(tenantRows ?? []).map((r: { unit_id: string }) => r.unit_id)];
         if (userUnitIds.some(uId => unitIdSet.has(uId))) filtered.add(uid);
       }
@@ -60,7 +69,7 @@ export async function POST(request: Request) {
       const unpaidUserIds = new Set<string>();
       for (const uid of userIds) {
         const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", uid);
-        const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid).or("is_payment_responsible.eq.true,is_payment_responsible.is.null");
+        const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid);
         const units = new Set([...(ownerUnits ?? []).map((r: { unit_id: string }) => r.unit_id), ...(tenantUnits ?? []).map((r: { unit_id: string }) => r.unit_id)]);
         if ([...units].some(u => unpaidUnitIds.has(u))) unpaidUserIds.add(uid);
       }

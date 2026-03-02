@@ -30,11 +30,15 @@ export function NotificationBell({ isManager, onSendClick }: NotificationBellPro
 
   const load = async () => {
     setLoading(true);
-    const res = await fetch("/api/notifications");
+    const res = await fetch("/api/notifications", { cache: "no-store" });
     const json = await res.json().catch(() => ({}));
     setNotifications(json.notifications ?? []);
     setLoading(false);
   };
+
+  useEffect(() => {
+    load();
+  }, []);
 
   useEffect(() => {
     if (open) load();
@@ -57,7 +61,7 @@ export function NotificationBell({ isManager, onSendClick }: NotificationBellPro
         <Button variant="ghost" size="icon" className="relative">
           <Bell className="size-5" />
           {unreadCount > 0 && (
-            <span className="absolute -top-0.5 -right-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-red-500 text-[10px] font-medium text-white">
+            <span className="absolute -top-1 -right-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-500 px-1 text-[11px] font-bold text-white ring-2 ring-background">
               {unreadCount > 99 ? "99+" : unreadCount}
             </span>
           )}

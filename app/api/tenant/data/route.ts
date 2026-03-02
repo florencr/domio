@@ -45,7 +45,7 @@ export async function GET() {
       admin.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
       admin.from("units").select("id, unit_name"),
       admin.from("buildings").select("id, name"),
-      sb.from("bills").select("id, unit_id, period_month, period_year, total_amount, status, paid_at, receipt_url, receipt_filename, receipt_path").order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(500),
+      sb.from("bills").select("id, unit_id, period_month, period_year, total_amount, status, paid_at, receipt_url, receipt_filename, receipt_path, reference_code").order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(500),
       admin.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
     ]);
     const allBills = (billsRes.data ?? []).filter((b: { unit_id: string }) => unitIdSet.has(b.unit_id));
