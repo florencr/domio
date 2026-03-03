@@ -149,7 +149,7 @@ export default function TenantPage() {
 
   return (
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
-      <input type="file" ref={fileInputRef} accept="image/*,.pdf" capture="environment" className="hidden"
+      <input type="file" ref={fileInputRef} accept="image/*,.pdf" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; const t = uploadTargetRef.current; if (f && (t.billId || (t.periodMonth != null && t.periodYear != null))) uploadSlip(t, f); e.target.value = ""; }} />
       <header className="flex items-center justify-between mb-6">
         <Link href="/dashboard/tenant" className="flex items-center">

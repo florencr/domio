@@ -5,12 +5,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SortableTh, sortBy } from "@/components/ui/sortable-th";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { LogOut, Settings, User, FileText } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -284,38 +285,62 @@ export default function ManagerPage() {
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Collected</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-green-600">{collected.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {bills.filter(b=>b.paid_at).length} paid bills</p></CardContent>
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+        <Card className="border-l-4 border-l-green-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-green-600 shrink-0">{collected.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Collected</p>
+            <p className="text-xs text-muted-foreground mt-0.5">From {bills.filter(b=>b.paid_at).length} paid bills</p>
+          </div>
         </Card>
-        <Card className="border-l-4 border-l-red-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Outstanding</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-red-600">{outstanding.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {bills.filter(b=>!b.paid_at).length} unpaid bills</p></CardContent>
+        <Card className="border-l-4 border-l-red-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-red-600 shrink-0">{outstanding.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Outstanding</p>
+            <p className="text-xs text-muted-foreground mt-0.5">From {bills.filter(b=>!b.paid_at).length} unpaid bills</p>
+          </div>
         </Card>
-        <Card className="border-l-4 border-l-orange-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Monthly Expenses</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-orange-600">{monthlyExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">{expenseRecords.length} expense records</p></CardContent>
+        <Card className="border-l-4 border-l-orange-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-orange-600 shrink-0">{monthlyExpenses.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Monthly Expenses</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{expenseRecords.length} expense records</p>
+          </div>
         </Card>
-        <Card className={`border-l-4 ${netFund >= 0 ? "border-l-blue-500" : "border-l-red-500"}`}>
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net Fund</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className={`text-2xl font-bold ${netFund >= 0 ? "text-blue-600" : "text-red-600"}`}>{netFund.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">Collected minus expenses</p></CardContent>
+        <Card className={`border-l-4 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start ${netFund >= 0 ? "border-l-blue-500" : "border-l-amber-500"}`}>
+          <p className={`text-xl font-extrabold shrink-0 ${netFund >= 0 ? "text-blue-600" : "text-amber-600"}`}>{netFund.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Net Fund</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Collected minus expenses</p>
+          </div>
         </Card>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-5 max-w-2xl mb-2">
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="expenses">Expenses</TabsTrigger>
-          <TabsTrigger value="payments">Payments</TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-          <TabsTrigger value="config">Config ⚙</TabsTrigger>
-        </TabsList>
+        <div className="hidden md:block mb-2">
+          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
+            <TabsTrigger value="billing" className="flex items-center gap-2"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="expenses" className="flex items-center gap-2"><Wallet className="size-4" />Expenses</TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-2"><CreditCard className="size-4" />Payments</TabsTrigger>
+            <TabsTrigger value="ledger" className="flex items-center gap-2"><BookOpen className="size-4" />Ledger</TabsTrigger>
+            <TabsTrigger value="config" className="flex items-center gap-2"><Settings className="size-4" />Config</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-4 pb-6">
+          <TabsList className="grid w-full grid-cols-4 h-16 min-h-[64px] p-1.5">
+            <TabsTrigger value="billing" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><FileText className="size-5" />Billing</TabsTrigger>
+            <TabsTrigger value="expenses" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><Wallet className="size-5" />Expenses</TabsTrigger>
+            <TabsTrigger value="payments" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><CreditCard className="size-5" />Payments</TabsTrigger>
+            <TabsTrigger value="ledger" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><BookOpen className="size-5" />Ledger</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="pb-28 md:pb-0">
         <TabsContent value="billing"><BillingTab data={data} reload={load} addBills={newBills => setData(prev => ({ ...prev, bills: [...(prev.bills || []), ...newBills] }))} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab data={data} reload={load} /></TabsContent>
         <TabsContent value="payments"><PaymentsTab bills={data.bills} units={data.units} profiles={data.profiles} unitOwners={data.unitOwners} /></TabsContent>
-        <TabsContent value="ledger"><LedgerTab bills={data.bills} expenses={data.expenses} units={data.units} /></TabsContent>
+        <TabsContent value="ledger"><LedgerTab bills={data.bills} expenses={data.expenses} units={data.units} unitTypes={data.unitTypes} vendors={data.vendors} serviceCategories={data.serviceCategories} /></TabsContent>
         <TabsContent value="config"><ConfigTab data={data} reload={load} configSubTab={configSubTab} setConfigSubTab={setConfigSubTab} /></TabsContent>
+        </div>
       </Tabs>
     </div>
   );
@@ -327,6 +352,12 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   const [year, setYear] = useState(String(new Date().getFullYear()));
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
   const [generating, setGenerating] = useState(false);
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [filterUnitType, setFilterUnitType] = useState<string>("all");
+  const [filterUnitId, setFilterUnitId] = useState<string>("all");
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
 
   const unitMap = new Map(data.units.map(u => [u.id, u]));
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
@@ -409,7 +440,41 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   }
 
   const yrs = [new Date().getFullYear(), new Date().getFullYear() - 1];
-  const sortedBills = [...data.bills].sort((a,b) => b.period_year - a.period_year || b.period_month - a.period_month);
+  const getBillValue = (b: Bill, col: string): string | number => {
+    const unit = unitMap.get(b.unit_id);
+    const ownerId = ownerMap.get(b.unit_id);
+    const owner = ownerId ? profileMap.get(ownerId) : null;
+    const billToId = unitBillToMap.get(b.unit_id);
+    const billTo = billToId ? profileMap.get(billToId) : null;
+    switch (col) {
+      case "ref": return (b.reference_code ?? "") as string;
+      case "period": return b.period_year * 100 + b.period_month;
+      case "unit": return (unit?.unit_name ?? "") as string;
+      case "building": return (unit ? buildingMap.get(unit.building_id) ?? "" : "") as string;
+      case "owner": return (owner ? `${owner.name} ${owner.surname}` : "") as string;
+      case "billTo": return (billTo ? `${billTo.name} ${billTo.surname}` : "Owner") as string;
+      case "amount": return Math.abs(Number(b.total_amount));
+      case "status": return (b.paid_at ? "Paid" : b.status) as string;
+      default: return "";
+    }
+  };
+  let filteredBills = data.bills;
+  if (filterPeriod !== "all") {
+    const [y, m] = filterPeriod.split("-").map(Number);
+    filteredBills = filteredBills.filter(b => b.period_year === y && b.period_month === m);
+  }
+  if (filterUnitType !== "all") {
+    const unitIdsByType = new Set(data.units.filter(u => u.type === filterUnitType).map(u => u.id));
+    filteredBills = filteredBills.filter(b => unitIdsByType.has(b.unit_id));
+  }
+  if (filterUnitId !== "all") filteredBills = filteredBills.filter(b => b.unit_id === filterUnitId);
+  if (filterPaymentStatus !== "all") {
+    if (filterPaymentStatus === "paid") filteredBills = filteredBills.filter(b => b.paid_at);
+    else if (filterPaymentStatus === "unpaid") filteredBills = filteredBills.filter(b => !b.paid_at && b.status !== "in_process");
+    else if (filterPaymentStatus === "in_process") filteredBills = filteredBills.filter(b => b.status === "in_process");
+  }
+  const sortedBills = sortCol ? sortBy(filteredBills, sortCol, sortDir, getBillValue) : [...filteredBills].sort((a,b) => b.period_year - a.period_year || b.period_month - a.period_month);
+  const handleSort = (col: string) => { setSortDir(prev => sortCol === col && prev === "asc" ? "desc" : "asc"); setSortCol(col); };
   const ownerPeriodCount = new Map<string, number>();
   sortedBills.forEach(b => {
     const ownerId = ownerMap.get(b.unit_id) ?? "_none";
@@ -458,19 +523,48 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>All Bills ({data.bills.length})</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardHeader><CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div><Label className="text-xs">Period</Label>
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All periods</SelectItem>
+                  {[...new Set(data.bills.map(b => `${b.period_year}-${b.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem> })}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Unit type</Label>
+              <Select value={filterUnitType} onValueChange={setFilterUnitType}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All types</SelectItem>{[...new Set(data.units.map(u=>u.type))].map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Unit</Label>
+              <Select value={filterUnitId} onValueChange={setFilterUnitId}>
+                <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All units</SelectItem>{data.units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Status</Label>
+              <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem><SelectItem value="in_process">In process</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
             <thead>
               <tr className="border-b text-left">
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Building</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Owner</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th>
+                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+                <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+                <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
+                <SortableTh column="building" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Building</SortableTh>
+                <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Owner</SortableTh>
+                <SortableTh column="billTo" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</SortableTh>
+                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">Amount</SortableTh>
+                <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground">Slip</th>
                 <th className="pb-3 font-medium text-muted-foreground">Action</th>
               </tr>
@@ -529,9 +623,10 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                   </tr>
                 );
               })}
-              {!data.bills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">No bills yet. Generate bills above.</td></tr>}
+              {!sortedBills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Generate bills above."}</td></tr>}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -548,9 +643,38 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
   const [showAdd, setShowAdd] = useState(false);
   const [addF, setAddF] = useState({title:"",category:"",vendor:"",amount:"",periodM:String(now.getMonth()+1),periodY:String(now.getFullYear())});
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterVendor, setFilterVendor] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
 
   const recurrentTemplates = expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
-  const expenseRecords = expenses.filter(e => e.period_month != null);
+  const allExpenseRecords = expenses.filter(e => e.period_month != null);
+  let expenseRecords = allExpenseRecords;
+  if (filterPeriod !== "all") {
+    const [y, m] = filterPeriod.split("-").map(Number);
+    expenseRecords = expenseRecords.filter(e => e.period_year === y && e.period_month === m);
+  }
+  if (filterCategory !== "all") expenseRecords = expenseRecords.filter(e => e.category === filterCategory);
+  if (filterVendor !== "all") expenseRecords = expenseRecords.filter(e => e.vendor === filterVendor);
+  if (filterType !== "all") expenseRecords = expenseRecords.filter(e => e.frequency === filterType);
+  const getExpValue = (e: Expense, col: string): string | number => {
+    switch (col) {
+      case "ref": return (e.reference_code ?? expenseRef(e)) as string;
+      case "period": return (e.period_year ?? 0) * 100 + (e.period_month ?? 0);
+      case "title": return e.title;
+      case "category": return e.category;
+      case "vendor": return e.vendor;
+      case "amount": return Number(e.amount);
+      case "freq": return e.frequency;
+      case "status": return (e.paid_at ? "Paid" : "Unpaid") as string;
+      default: return "";
+    }
+  };
+  const displayExpenses = sortCol ? sortBy(expenseRecords, sortCol, sortDir, getExpValue) : expenseRecords;
+  const handleExpSort = (col: string) => { setSortDir(prev => sortCol === col && prev === "asc" ? "desc" : "asc"); setSortCol(col); };
   const adhocAny = expenses.filter(e => e.frequency !== "recurrent");
   const monthlyTotal = recurrentTemplates.reduce((s, e) => s + Number(e.amount), 0);
   const adhocTotal = adhocAny.reduce((s, e) => s + Number(e.amount), 0);
@@ -606,7 +730,6 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   }
 
   const yrs = [new Date().getFullYear(), new Date().getFullYear() - 1];
-  const displayExpenses = expenseRecords;
 
   return (
     <div className="space-y-4 mt-2">
@@ -688,10 +811,49 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>All Expenses ({displayExpenses.length})</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardHeader><CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div><Label className="text-xs">Period</Label>
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All periods</SelectItem>
+                  {[...new Set(allExpenseRecords.map(e=>`${e.period_year}-${e.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k=>{const [y,m]=k.split("-");return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem>})}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Category</Label>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All</SelectItem>{[...new Set(allExpenseRecords.map(e=>e.category))].filter(Boolean).map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Vendor</Label>
+              <Select value={filterVendor} onValueChange={setFilterVendor}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All</SelectItem>{[...new Set(allExpenseRecords.map(e=>e.vendor))].filter(Boolean).map(v=><SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Type</Label>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="recurrent">Recurrent</SelectItem><SelectItem value="ad_hoc">Ad-hoc</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Title</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Category</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Vendor</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Recurrent / Ad-hoc</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+            <thead><tr className="border-b text-left">
+              <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+              <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+              <SortableTh column="title" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Title</SortableTh>
+              <SortableTh column="category" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Category</SortableTh>
+              <SortableTh column="vendor" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Vendor</SortableTh>
+              <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">Amount</SortableTh>
+              <SortableTh column="freq" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Recurrent / Ad-hoc</SortableTh>
+              <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleExpSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
+              <th className="pb-3 font-medium text-muted-foreground">Action</th>
+            </tr></thead>
             <tbody className="divide-y divide-border">
               {displayExpenses.map(e => (
                 <tr key={e.id} className="hover:bg-muted/30">
@@ -720,9 +882,10 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                   </td>
                 </tr>
               ))}
-              {!displayExpenses.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No expenses. Generate recurrent or record ad-hoc above. Define templates in Configuration.</td></tr>}
+              {!displayExpenses.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">{expenseRecords.length === 0 && allExpenseRecords.length > 0 ? "No expenses match filters." : "No expenses. Generate recurrent or record ad-hoc above. Define templates in Configuration."}</td></tr>}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -731,22 +894,68 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
 
 // ─── Payments Tab ─────────────────────────────────────────────────────────
 function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; units: Unit[]; profiles: Profile[]; unitOwners: UnitOwner[] }) {
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const unitMap = new Map(units.map(u => [u.id, u]));
   const ownerMap = new Map(unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
   const profileMap = new Map(profiles.map(p => [p.id, p]));
-  const paid = [...bills.filter(b => b.paid_at)].sort((a,b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
+  let paidRaw = bills.filter(b => b.paid_at);
+  if (filterPeriod !== "all") { const [y, m] = filterPeriod.split("-").map(Number); paidRaw = paidRaw.filter(b => b.period_year === y && b.period_month === m); }
+  if (filterUnitId !== "all") paidRaw = paidRaw.filter(b => b.unit_id === filterUnitId);
+  const getPaidValue = (b: Bill, col: string): string | number => {
+    const unit = unitMap.get(b.unit_id);
+    const ownerId = ownerMap.get(b.unit_id);
+    const owner = ownerId ? profileMap.get(ownerId) : null;
+    switch (col) {
+      case "ref": return (b.reference_code ?? "") as string;
+      case "paidOn": return new Date(b.paid_at!).getTime();
+      case "unit": return (unit?.unit_name ?? "") as string;
+      case "owner": return (owner ? `${owner.name} ${owner.surname}` : "") as string;
+      case "period": return b.period_year * 100 + b.period_month;
+      case "amount": return Math.abs(Number(b.total_amount));
+      default: return "";
+    }
+  };
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const paid = sortCol ? sortBy(paidRaw, sortCol, sortDir, getPaidValue) : [...paidRaw].sort((a,b) => new Date(b.paid_at!).getTime() - new Date(a.paid_at!).getTime());
   const totalPaid = paid.reduce((s,b) => s + Math.abs(Number(b.total_amount)), 0);
+  const handlePaidSort = (col: string) => { setSortDir(prev => sortCol === col && prev === "asc" ? "desc" : "asc"); setSortCol(col); };
   return (
     <div className="space-y-4 mt-2">
-      <Card className="border-l-4 border-l-green-500">
-        <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Total Collected</CardTitle></CardHeader>
-        <CardContent className="pb-4"><p className="text-2xl font-bold text-green-600">{totalPaid.toFixed(2)}</p><p className="text-xs text-muted-foreground">{paid.length} payments received</p></CardContent>
+      <Card className="border-l-4 border-l-green-500 py-2 px-4 gap-1">
+        <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total Collected</CardTitle></CardHeader>
+        <CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-green-600">{totalPaid.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">{paid.length} payments received</p></CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Payment History ({paid.length})</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardHeader><CardTitle>Payment History ({paid.length}{paidRaw.length !== bills.filter(b=>b.paid_at).length ? ` of ${bills.filter(b=>b.paid_at).length}` : ""})</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div><Label className="text-xs">Period</Label>
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All periods</SelectItem>
+                  {[...new Set(bills.filter(b=>b.paid_at).map(b=>`${b.period_year}-${b.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k=>{const [y,m]=k.split("-");return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem>})}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Unit</Label>
+              <Select value={filterUnitId} onValueChange={setFilterUnitId}>
+                <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[500px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid On</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Owner</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 font-medium text-muted-foreground text-right">Amount</th></tr></thead>
+            <thead><tr className="border-b text-left">
+              <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+              <SortableTh column="paidOn" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Paid On</SortableTh>
+              <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
+              <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Owner</SortableTh>
+              <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+              <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 font-medium text-muted-foreground" align="right">Amount</SortableTh>
+            </tr></thead>
             <tbody className="divide-y divide-border">
               {paid.map(b => {
                 const unit = unitMap.get(b.unit_id);
@@ -763,9 +972,10 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
                   </tr>
                 );
               })}
-              {!paid.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">No payments yet.</td></tr>}
+              {!paid.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">{paidRaw.length === 0 && bills.filter(b=>b.paid_at).length > 0 ? "No payments match filters." : "No payments yet."}</td></tr>}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -773,35 +983,124 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
 }
 
 // ─── Ledger Tab ───────────────────────────────────────────────────────────
-function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expense[]; units: Unit[] }) {
-  const unitMap = new Map(units.map(u => [u.id, u.unit_name]));
+function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategories }: { bills: Bill[]; expenses: Expense[]; units: Unit[]; unitTypes: UnitType[]; vendors: Vendor[]; serviceCategories: ServiceCategory[] }) {
+  const [filterPeriod, setFilterPeriod] = useState<string>("all");
+  const [filterUnitType, setFilterUnitType] = useState<string>("all");
+  const [filterUnitId, setFilterUnitId] = useState<string>("all");
+  const [filterCategory, setFilterCategory] = useState<string>("all");
+  const [filterVendor, setFilterVendor] = useState<string>("all");
+  const [filterType, setFilterType] = useState<string>("all");
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
+  const unitMap = new Map(units.map(u => [u.id, u]));
+  const unitNameMap = new Map(units.map(u => [u.id, u.unit_name]));
 
-  // Combine and sort by period/date newest first
+  let filteredBills = bills;
+  let filteredExpenses = expenses.filter(e => e.period_month != null);
+  if (filterPeriod !== "all") { const [y, m] = filterPeriod.split("-").map(Number); filteredBills = filteredBills.filter(b => b.period_year === y && b.period_month === m); filteredExpenses = filteredExpenses.filter(e => e.period_year === y && e.period_month === m); }
+  if (filterUnitType !== "all") filteredBills = filteredBills.filter(b => unitMap.get(b.unit_id)?.type === filterUnitType);
+  if (filterUnitId !== "all") filteredBills = filteredBills.filter(b => b.unit_id === filterUnitId);
+  if (filterCategory !== "all") filteredExpenses = filteredExpenses.filter(e => e.category === filterCategory);
+  if (filterVendor !== "all") filteredExpenses = filteredExpenses.filter(e => e.vendor === filterVendor);
+  if (filterPaymentStatus === "paid") { filteredBills = filteredBills.filter(b => b.paid_at); filteredExpenses = filteredExpenses.filter(e => e.paid_at); }
+  else if (filterPaymentStatus === "unpaid") { filteredBills = filteredBills.filter(b => !b.paid_at); filteredExpenses = filteredExpenses.filter(e => !e.paid_at); }
+  if (filterType === "bill") filteredExpenses = [];
+  else if (filterType === "expense") filteredBills = [];
+
   type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; ref: string; amount: number; status: string };
   const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTHS[parseInt(m||"1")-1]} ${y}`; };
   const rows: LedgerRow[] = [
-    ...bills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: b.reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
-    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: e.reference_code ?? expenseRef(e), amount: Number(e.amount), status: e.paid_at ? "Paid" : e.frequency })),
-  ].sort((a,b) => b.date.localeCompare(a.date));
-
+    ...filteredBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitNameMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: b.reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
+    ...filteredExpenses.map(e => ({ key:`e-${e.id}`, date: `${e.period_year}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: e.reference_code ?? expenseRef(e), amount: Number(e.amount), status: e.paid_at ? "Paid" : e.frequency })),
+  ];
+  const getLedgerValue = (r: LedgerRow & { balance?: number }, col: string): string | number => {
+    switch (col) {
+      case "ref": return r.ref;
+      case "date": return r.date;
+      case "type": return r.type;
+      case "label": return r.label;
+      case "status": return r.status;
+      case "amount": return r.amount;
+      case "balance": return r.balance ?? 0;
+      default: return "";
+    }
+  };
+  const [sortCol, setSortCol] = useState<string | null>(null);
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
+  const sortedRows = sortCol ? sortBy(rows, sortCol, sortDir, getLedgerValue) : [...rows].sort((a,b) => b.date.localeCompare(a.date));
   let running = 0;
-  const rowsWithBalance = [...rows].reverse().map(r => { running += r.type === "income" ? r.amount : -r.amount; return {...r, balance: running}; }).reverse();
+  const rowsWithBalance = [...sortedRows].reverse().map(r => { running += r.type === "income" ? r.amount : -r.amount; return {...r, balance: running}; }).reverse();
 
   const totalIn = rows.filter(r=>r.type==="income").reduce((s,r)=>s+r.amount,0);
   const totalOut = rows.filter(r=>r.type==="expense").reduce((s,r)=>s+r.amount,0);
+  const handleLedgerSort = (col: string) => { setSortDir(prev => sortCol === col && prev === "asc" ? "desc" : "asc"); setSortCol(col); };
 
   return (
     <div className="space-y-4 mt-2">
-      <div className="grid grid-cols-3 gap-4">
-        <Card><CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Total Billed</CardTitle></CardHeader><CardContent className="pb-4"><p className="text-xl font-bold text-green-600">+{totalIn.toFixed(2)}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Total Expenses</CardTitle></CardHeader><CardContent className="pb-4"><p className="text-xl font-bold text-red-600">-{totalOut.toFixed(2)}</p></CardContent></Card>
-        <Card><CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Balance</CardTitle></CardHeader><CardContent className="pb-4"><p className={`text-xl font-bold ${totalIn-totalOut>=0?"text-blue-600":"text-red-600"}`}>{(totalIn-totalOut).toFixed(2)}</p></CardContent></Card>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Card className="py-2 px-4 gap-1"><CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total Billed</CardTitle></CardHeader><CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-green-600">+{totalIn.toFixed(2)}</p></CardContent></Card>
+        <Card className="py-2 px-4 gap-1"><CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total Expenses</CardTitle></CardHeader><CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-red-600">-{totalOut.toFixed(2)}</p></CardContent></Card>
+        <Card className="py-2 px-4 gap-1"><CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Balance</CardTitle></CardHeader><CardContent className="pb-2 pt-0 px-0"><p className={`text-lg font-extrabold ${totalIn-totalOut>=0?"text-blue-600":"text-red-600"}`}>{(totalIn-totalOut).toFixed(2)}</p></CardContent></Card>
       </div>
       <Card>
-        <CardHeader><CardTitle>Full Ledger ({rows.length} entries)</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
+        <CardHeader><CardTitle>Full Ledger ({rows.length}{rows.length !== bills.length + expenses.filter(e=>e.period_month!=null).length ? ` of ${bills.length + expenses.filter(e=>e.period_month!=null).length}` : ""} entries)</CardTitle></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="flex flex-wrap gap-2 items-end">
+            <div><Label className="text-xs">Period</Label>
+              <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All periods</SelectItem>
+                  {[...new Set([...bills.map(b=>`${b.period_year}-${b.period_month}`), ...expenses.filter(e=>e.period_month!=null).map(e=>`${e.period_year}-${e.period_month}`)])].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k=>{const [y,m]=k.split("-");return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem>})}
+                </SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Unit type</Label>
+              <Select value={filterUnitType} onValueChange={setFilterUnitType}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All types</SelectItem>{unitTypes.map(t=><SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Unit</Label>
+              <Select value={filterUnitId} onValueChange={setFilterUnitId}>
+                <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Category</Label>
+              <Select value={filterCategory} onValueChange={setFilterCategory}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All categories</SelectItem>{[...new Set(expenses.map(e=>e.category))].sort().map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Vendor</Label>
+              <Select value={filterVendor} onValueChange={setFilterVendor}>
+                <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All vendors</SelectItem>{[...new Set(expenses.map(e=>e.vendor))].sort().map(v=><SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Type</Label>
+              <Select value={filterType} onValueChange={setFilterType}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">Bill & Expense</SelectItem><SelectItem value="bill">Bill only</SelectItem><SelectItem value="expense">Expense only</SelectItem></SelectContent>
+              </Select>
+            </div>
+            <div><Label className="text-xs">Payment</Label>
+              <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
+                <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem></SelectContent>
+              </Select>
+            </div>
+          </div>
+          <div className="overflow-x-auto">
           <table className="w-full text-sm min-w-[600px]">
-            <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
+            <thead><tr className="border-b text-left">
+              <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+              <SortableTh column="date" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+              <SortableTh column="type" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
+              <SortableTh column="label" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Description</SortableTh>
+              <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
+              <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">Amount</SortableTh>
+              <SortableTh column="balance" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground" align="right">Running Balance</SortableTh>
+            </tr></thead>
             <tbody className="divide-y divide-border">
               {rowsWithBalance.map(r => (
                 <tr key={r.key} className="hover:bg-muted/30">
@@ -820,9 +1119,10 @@ function LedgerTab({ bills, expenses, units }: { bills: Bill[]; expenses: Expens
                   <td className={`py-3 text-right font-mono text-sm ${r.balance>=0?"text-blue-600":"text-red-600"}`}>{r.balance.toFixed(2)}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
+              {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{bills.length + expenses.filter(e=>e.period_month!=null).length > 0 ? "No entries match filters." : "No transactions yet."}</td></tr>}
             </tbody>
           </table>
+          </div>
         </CardContent>
       </Card>
     </div>
@@ -1053,21 +1353,18 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
       </div>
 
       {showCreate && (
-        <Card className="border-green-200 bg-green-50/20">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Add Building</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={create} className="flex gap-3 flex-wrap items-end">
+        <div className="border border-green-200 bg-green-50/20 rounded-lg p-4">
+          <p className="text-base font-semibold mb-3">Add Building</p>
+          <form onSubmit={create} className="flex gap-3 flex-wrap items-end">
               <div><Label>Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Building A" required className="w-44"/></div>
               <Button type="submit">Create</Button>
             </form>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {/* Buildings Table */}
-        <Card className={editingBuilding ? "md:col-span-1" : "md:col-span-2"}>
-          <CardContent className="p-0 overflow-x-auto">
+        <div className={`overflow-x-auto ${editingBuilding ? "md:col-span-1" : "md:col-span-2"}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
@@ -1110,17 +1407,13 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                 )}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+        </div>
 
         {/* Edit Panel */}
         {editingBuilding && (
-          <Card className="border-blue-200">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base">Edit Building</CardTitle>
-              <p className="text-xs text-muted-foreground">{editingBuilding.name}</p>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+          <div className="border border-blue-200 rounded-lg p-4">
+            <p className="text-base font-semibold pb-3 border-b">{editingBuilding.name}</p>
+            <div className="space-y-4 pt-4">
               <div><Label className="text-xs">Building Name</Label><Input value={editF.name} onChange={e=>setEditF({...editF,name:e.target.value})} className="h-8 text-sm mt-1" /></div>
 
               <div className="flex gap-2">
@@ -1136,8 +1429,8 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                     : <Button size="sm" variant="destructive" className="w-full" onClick={() => del(editingBuilding.id)}>Delete building</Button>;
                 })()}
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1218,10 +1511,9 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
       </div>
 
       {showCreate && (
-        <Card className="border-green-200 bg-green-50/20">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Add Unit</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
+        <div className="border border-green-200 bg-green-50/20 rounded-lg p-4">
+          <p className="text-base font-semibold mb-3">Add Unit</p>
+          <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
               <div><Label className="text-xs">Building</Label>
                 <Select value={f.buildingId} onValueChange={v=>setF({...f,buildingId:v})}>
                   <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select building"/></SelectTrigger>
@@ -1261,14 +1553,12 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
                 <Button type="button" size="sm" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {/* Units Table */}
-        <Card className={editingUnit ? "md:col-span-1" : "md:col-span-2"}>
-          <CardContent className="p-0 overflow-x-auto">
+        <div className={`overflow-x-auto ${editingUnit ? "md:col-span-1" : "md:col-span-2"}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
@@ -1326,17 +1616,13 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
                 )}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+        </div>
 
         {/* Edit Panel */}
         {editingUnit && (
-          <Card className="border-blue-200">
-            <CardHeader className="pb-3 border-b">
-              <CardTitle className="text-base">Edit Unit</CardTitle>
-              <p className="text-xs text-muted-foreground">{editingUnit.unit_name} · {buildingMap.get(editingUnit.building_id)}</p>
-            </CardHeader>
-            <CardContent className="space-y-3 pt-4">
+          <div className="border border-blue-200 rounded-lg p-4">
+            <p className="text-base font-semibold pb-3 border-b">{editingUnit.unit_name} · {buildingMap.get(editingUnit.building_id)}</p>
+            <div className="space-y-3 pt-4">
               <div className="grid grid-cols-2 gap-2">
                 <div className="col-span-2"><Label className="text-xs">Building</Label>
                   <Select value={editF.buildingId} onValueChange={v=>setEditF({...editF,buildingId:v})}>
@@ -1380,8 +1666,8 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
               <div className="pt-2 border-t">
                 <Button size="sm" variant="destructive" className="w-full" onClick={() => del(editingUnit.id)}>Delete unit</Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>
@@ -1426,12 +1712,10 @@ function UnitTypesCfg({ data, reload }: { data: Data; reload: () => void }) {
     <div className="space-y-4">
       {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-red-500"}`}>{msg.text}</p>}
 
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Unit Types ({data.unitTypes.length})</CardTitle>
-          <p className="text-xs text-muted-foreground">Unit types are used to categorize units and link services to billing.</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold mb-1">Unit Types ({data.unitTypes.length})</h3>
+        <p className="text-xs text-muted-foreground mb-4">Unit types are used to categorize units and link services to billing.</p>
+        <div className="space-y-4">
           {/* Add form */}
           <form onSubmit={create} className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs"><Label className="text-xs">New Type Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Apartment, Parking, Garden" required className="h-8 text-sm"/></div>
@@ -1494,8 +1778,8 @@ function UnitTypesCfg({ data, reload }: { data: Data; reload: () => void }) {
               )}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1541,10 +1825,9 @@ function ServicesCfg({ data, reload }: { data: Data; reload: () => void }) {
       </div>
 
       {showCreate && (
-        <Card className="border-green-200 bg-green-50/20">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Add Service</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
+        <div className="border border-green-200 bg-green-50/20 rounded-lg p-4">
+          <p className="text-base font-semibold mb-3">Add Service</p>
+          <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
               <div><Label className="text-xs">Service Name</Label><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})} placeholder="e.g. Maintenance" required className="h-8 text-sm"/></div>
               <div><Label className="text-xs">Category</Label>
                 <Select value={f.category} onValueChange={v=>setF({...f,category:v})}>
@@ -1576,12 +1859,10 @@ function ServicesCfg({ data, reload }: { data: Data; reload: () => void }) {
                 <Button type="button" size="sm" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
+      <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
@@ -1664,8 +1945,7 @@ function ServicesCfg({ data, reload }: { data: Data; reload: () => void }) {
               )}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -1715,10 +1995,9 @@ function ExpensesCfg({ data, reload }: { data: Data; reload: () => void }) {
       </div>
 
       {showCreate && (
-        <Card className="border-green-200 bg-green-50/20">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Add Expense</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
+        <div className="border border-green-200 bg-green-50/20 rounded-lg p-4">
+          <p className="text-base font-semibold mb-3">Add Expense</p>
+          <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
               <div className="col-span-2 md:col-span-1"><Label className="text-xs">Title</Label><Input value={f.title} onChange={e=>setF({...f,title:e.target.value})} placeholder="e.g. Monthly Security" required className="h-8 text-sm"/></div>
               <div><Label className="text-xs">Category</Label>
                 <Select value={f.category} onValueChange={v=>setF({...f,category:v})}>
@@ -1744,12 +2023,10 @@ function ExpensesCfg({ data, reload }: { data: Data; reload: () => void }) {
                 <Button type="button" size="sm" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
-      <Card>
-        <CardContent className="p-0 overflow-x-auto">
+      <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="border-b bg-muted/40">
@@ -1824,8 +2101,7 @@ function ExpensesCfg({ data, reload }: { data: Data; reload: () => void }) {
               )}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+      </div>
     </div>
   );
 }
@@ -1865,12 +2141,10 @@ function VendorsCfg({ data, reload }: { data: Data; reload: () => void }) {
   return (
     <div className="space-y-4">
       {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-red-500"}`}>{msg.text}</p>}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Vendors ({data.vendors.length})</CardTitle>
-          <p className="text-xs text-muted-foreground">Companies or individuals providing services linked to expenses.</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold mb-1">Vendors ({data.vendors.length})</h3>
+        <p className="text-xs text-muted-foreground mb-4">Companies or individuals providing services linked to expenses.</p>
+        <div className="space-y-4">
           <form onSubmit={create} className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs"><Label className="text-xs">Vendor Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Octapus Security" required className="h-8 text-sm"/></div>
             <Button type="submit" size="sm">Add</Button>
@@ -1925,8 +2199,8 @@ function VendorsCfg({ data, reload }: { data: Data; reload: () => void }) {
               {!data.vendors.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No vendors yet.</td></tr>}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1969,12 +2243,10 @@ function CategoriesCfg({ data, reload }: { data: Data; reload: () => void }) {
   return (
     <div className="space-y-4">
       {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-red-500"}`}>{msg.text}</p>}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="text-base">Service Categories ({data.serviceCategories.length})</CardTitle>
-          <p className="text-xs text-muted-foreground">Categories group expenses and services (e.g. Security, Cleaning, Utilities).</p>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div>
+        <h3 className="text-base font-semibold mb-1">Service Categories ({data.serviceCategories.length})</h3>
+        <p className="text-xs text-muted-foreground mb-4">Categories group expenses and services (e.g. Security, Cleaning, Utilities).</p>
+        <div className="space-y-4">
           <form onSubmit={create} className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs"><Label className="text-xs">Category Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="e.g. Security, Cleaning" required className="h-8 text-sm"/></div>
             <Button type="submit" size="sm">Add</Button>
@@ -2032,8 +2304,8 @@ function CategoriesCfg({ data, reload }: { data: Data; reload: () => void }) {
               {!data.serviceCategories.length && <tr><td colSpan={4} className="px-4 py-8 text-center text-muted-foreground">No categories yet.</td></tr>}
             </tbody>
           </table>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }
@@ -2146,10 +2418,9 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
 
       {/* Create User Form */}
       {showCreate && (
-        <Card className="border-green-200 bg-green-50/20">
-          <CardHeader className="pb-3"><CardTitle className="text-base">Create New User</CardTitle></CardHeader>
-          <CardContent>
-            <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3">
+        <div className="border border-green-200 bg-green-50/20 rounded-lg p-4">
+          <p className="text-base font-semibold mb-3">Create New User</p>
+          <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div><Label>Name</Label><Input value={f.name} onChange={e=>setF({...f,name:e.target.value})} required /></div>
               <div><Label>Surname</Label><Input value={f.surname} onChange={e=>setF({...f,surname:e.target.value})} required /></div>
               <div><Label>Email</Label><Input type="email" value={f.email} onChange={e=>setF({...f,email:e.target.value})} required /></div>
@@ -2166,14 +2437,12 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
                 <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
               </div>
             </form>
-          </CardContent>
-        </Card>
+        </div>
       )}
 
       <div className="grid md:grid-cols-2 gap-4">
         {/* Users Table */}
-        <Card className={editingUser ? "md:col-span-1" : "md:col-span-2"}>
-          <CardContent className="p-0 overflow-x-auto">
+        <div className={`overflow-x-auto ${editingUser ? "md:col-span-1" : "md:col-span-2"}`}>
             <table className="w-full text-sm">
               <thead>
                 <tr className="border-b bg-muted/40">
@@ -2216,27 +2485,24 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
                 {!data.profiles.length && <tr><td colSpan={6} className="px-3 py-8 text-center text-muted-foreground">No users yet.</td></tr>}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+        </div>
 
         {/* Edit Panel — shows alongside table when a user is selected */}
         {editingUser && (
-          <Card className="border-blue-200">
-            <CardHeader className="pb-3 border-b">
-              <div className="flex items-center gap-3">
-                <label className="cursor-pointer relative group flex-shrink-0" title="Click to change photo">
-                  <Avatar profile={editingUser} large />
-                  <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadAvatar(editingUser.id, file); }} />
-                  <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-bold">📷</div>
-                  {uploadingFor === editingUser.id && <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center text-white text-[10px]">...</div>}
-                </label>
-                <div>
-                  <CardTitle className="text-base">{editingUser.name} {editingUser.surname}</CardTitle>
-                  <p className="text-xs text-muted-foreground mt-0.5">{editingUser.email}</p>
-                </div>
+          <div className="border border-blue-200 rounded-lg p-4">
+            <div className="pb-3 border-b flex items-center gap-3">
+              <label className="cursor-pointer relative group flex-shrink-0" title="Click to change photo">
+                <Avatar profile={editingUser} large />
+                <input type="file" accept="image/*" className="hidden" onChange={e => { const file = e.target.files?.[0]; if (file) uploadAvatar(editingUser.id, file); }} />
+                <div className="absolute inset-0 rounded-full bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity text-white text-[10px] font-bold">📷</div>
+                {uploadingFor === editingUser.id && <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center text-white text-[10px]">...</div>}
+              </label>
+              <div>
+                <p className="text-base font-semibold">{editingUser.name} {editingUser.surname}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{editingUser.email}</p>
               </div>
-            </CardHeader>
-            <CardContent className="space-y-4 pt-4">
+            </div>
+            <div className="space-y-4 pt-4">
 
               {/* Edit Fields */}
               <div>
@@ -2300,8 +2566,8 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
               <div className="pt-2 border-t">
                 <Button size="sm" variant="destructive" className="w-full" onClick={() => deleteUser(editingUser.id)}>Delete user permanently</Button>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </div>
         )}
       </div>
     </div>
