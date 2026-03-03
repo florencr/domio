@@ -8,7 +8,7 @@ import { SortableTh, sortBy } from "@/components/ui/sortable-th";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
-import { LogOut, User, Camera, FileText, Download, Home, BookOpen, Bell, SlidersHorizontal, AlertTriangle } from "lucide-react";
+import { LogOut, User, Camera, FileText, Download, Home, BookOpen, Bell, SlidersHorizontal, AlertTriangle, CreditCard } from "lucide-react";
 import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -61,6 +61,7 @@ export default function TenantPage() {
   const [filterLedgerStatus, setFilterLedgerStatus] = useState("all");
   const [showBillingFilters, setShowBillingFilters] = useState(false);
   const [showLedgerFilters, setShowLedgerFilters] = useState(false);
+  const [paymentInfo, setPaymentInfo] = useState<{ site_name: string | null; bank_name: string | null; iban: string | null; swift_code: string | null; vat_account: string | null; manager_name: string | null; manager_email: string | null; manager_phone: string | null; payment_methods: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   type UploadTarget = { billId?: string; periodMonth?: number; periodYear?: number };
   const uploadTargetRef = useRef<UploadTarget>({});
@@ -113,6 +114,13 @@ export default function TenantPage() {
     setNotifications(json.notifications ?? []);
   };
   useEffect(() => { if (tab === "notifications") loadNotifications(); }, [tab]);
+
+  const loadPaymentInfo = async () => {
+    const res = await fetch("/api/payment-info", { cache: "no-store" });
+    const json = await res.json().catch(() => ({}));
+    setPaymentInfo(json);
+  };
+  useEffect(() => { if (tab === "payments") loadPaymentInfo(); }, [tab]);
 
   async function handleSignOut() {
     await createClient().auth.signOut();
@@ -278,17 +286,19 @@ export default function TenantPage() {
 
       <Tabs value={tab} onValueChange={setTab}>
         <div className="hidden md:block mb-2">
-          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+          <TabsList className="grid w-full grid-cols-5 max-w-2xl">
             <TabsTrigger value="units" className="flex items-center gap-2"><Home className="size-4" />My Units</TabsTrigger>
             <TabsTrigger value="billing" className="flex items-center gap-2"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="payments" className="flex items-center gap-2"><CreditCard className="size-4" />Payments</TabsTrigger>
             <TabsTrigger value="ledger" className="flex items-center gap-2"><BookOpen className="size-4" />Ledger</TabsTrigger>
             <TabsTrigger value="notifications" className="flex items-center gap-2"><Bell className="size-4" />Notifications</TabsTrigger>
           </TabsList>
         </div>
         <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-4">
-          <TabsList className="grid w-full grid-cols-3 h-12 min-h-[48px] p-1.5 rounded-lg">
+          <TabsList className="grid w-full grid-cols-4 h-12 min-h-[48px] p-1.5 rounded-lg">
             <TabsTrigger value="units" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Home className="size-4" />My Units</TabsTrigger>
             <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="payments" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><CreditCard className="size-4" />Payments</TabsTrigger>
             <TabsTrigger value="ledger" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><BookOpen className="size-4" />Ledger</TabsTrigger>
           </TabsList>
         </div>
@@ -319,6 +329,51 @@ export default function TenantPage() {
               </table>
             </CardContent>
           </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="payments">
+          <div className="space-y-4 mt-2">
+            <Card>
+              <CardHeader><CardTitle>Bank Account & Payment Methods</CardTitle><p className="text-sm text-muted-foreground mt-1">Payment details for your property manager.</p></CardHeader>
+              <CardContent className="space-y-4">
+                {paymentInfo ? (
+                  <>
+                    {paymentInfo.site_name && <p className="font-medium">{paymentInfo.site_name}</p>}
+                    {(paymentInfo.bank_name || paymentInfo.iban || paymentInfo.swift_code) && (
+                      <div className="space-y-2">
+                        {paymentInfo.bank_name && <div><p className="text-sm font-medium text-muted-foreground">Bank name</p><p className="text-sm mt-0.5">{paymentInfo.bank_name}</p></div>}
+                        {paymentInfo.iban && <div><p className="text-sm font-medium text-muted-foreground">IBAN</p><p className="text-sm mt-0.5 break-words">{paymentInfo.iban}</p></div>}
+                        {paymentInfo.swift_code && <div><p className="text-sm font-medium text-muted-foreground">SWIFT code</p><p className="text-sm mt-0.5">{paymentInfo.swift_code}</p></div>}
+                      </div>
+                    )}
+                    {paymentInfo.vat_account && (
+                      <div>
+                        <p className="text-sm font-medium text-muted-foreground">VAT</p>
+                        <p className="text-sm mt-0.5">{paymentInfo.vat_account}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Manager contact</p>
+                      <div className="text-sm mt-0.5 space-y-1">
+                        {paymentInfo.manager_name && <p>{paymentInfo.manager_name}</p>}
+                        {paymentInfo.manager_email && <p><a href={`mailto:${paymentInfo.manager_email}`} className="text-primary hover:underline">{paymentInfo.manager_email}</a></p>}
+                        {paymentInfo.manager_phone && <p>{paymentInfo.manager_phone}</p>}
+                        {!paymentInfo.manager_name && !paymentInfo.manager_email && !paymentInfo.manager_phone && <p className="text-muted-foreground">—</p>}
+                      </div>
+                    </div>
+                    <div>
+                      <p className="text-sm font-medium text-muted-foreground">Payment methods</p>
+                      <ul className="text-sm mt-0.5 list-disc list-inside space-y-1">
+                        {paymentInfo.payment_methods?.map((m, i) => <li key={i}>{m}</li>) ?? <li>Contact your property manager for payment instructions.</li>}
+                      </ul>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-sm text-muted-foreground">Loading payment info...</p>
+                )}
+              </CardContent>
+            </Card>
           </div>
         </TabsContent>
 

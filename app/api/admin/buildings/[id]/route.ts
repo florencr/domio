@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 async function requireAdmin() {
   const sb = await createClient();
@@ -13,7 +14,7 @@ async function requireAdmin() {
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
-  return { ok: true as const, admin };
+  return { ok: true as const, admin, user };
 }
 
 export async function PATCH(
@@ -23,17 +24,31 @@ export async function PATCH(
   try {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-    const { admin } = r;
+    const { admin, user } = r;
     const { id } = await context.params;
-    const { name } = await request.json();
+    const { name, site_id } = await request.json();
 
-    if (!name?.trim()) {
-      return NextResponse.json({ error: "name required" }, { status: 400 });
+    const updates: { name?: string; site_id?: string | null } = {};
+    if (name !== undefined) updates.name = name.trim();
+    if (site_id !== undefined) updates.site_id = site_id || null;
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ error: "name or site_id required" }, { status: 400 });
     }
 
-    const updates = { name: name.trim() };
-
+    const { data: building } = await admin.from("buildings").select("site_id").eq("id", id).single();
     await admin.from("buildings").update(updates).eq("id", id);
+
+    await logAudit({
+      user_id: user.id,
+      user_email: user.email,
+      action: "update",
+      entity_type: "building",
+      entity_id: id,
+      entity_label: updates.name,
+      site_id: (building as { site_id?: string } | null)?.site_id,
+      new_values: updates,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -48,10 +63,22 @@ export async function DELETE(
   try {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-    const { admin } = r;
+    const { admin, user } = r;
     const { id } = await context.params;
 
+    const { data: building } = await admin.from("buildings").select("name,site_id").eq("id", id).single();
     await admin.from("buildings").delete().eq("id", id);
+
+    await logAudit({
+      user_id: user.id,
+      user_email: user.email,
+      action: "delete",
+      entity_type: "building",
+      entity_id: id,
+      entity_label: (building as { name?: string } | null)?.name ?? id,
+      site_id: (building as { site_id?: string } | null)?.site_id,
+      old_values: building ?? undefined,
+    });
 
     return NextResponse.json({ success: true });
   } catch (err) {

@@ -2,6 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import PDFDocument from "pdfkit";
+import path from "path";
+import fs from "fs";
 
 function adminClient() {
   return createAdminClient(
@@ -30,9 +32,11 @@ export async function GET(request: Request) {
     const admin = adminClient();
 
     let bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; paid_at: string | null; reference_code?: string }[];
-    let site: { name?: string; address?: string; vat_account?: string } | null = null;
+    let site: { id?: string; name?: string; address?: string; vat_account?: string; bank_name?: string; iban?: string; swift_code?: string; tax_amount?: number | null; manager_id?: string } | null = null;
     let ownerProfile: { name?: string; surname?: string; email?: string } | null = null;
     let billToName = "Owner";
+    let billToRole: "Owner" | "Tenant" = "Owner";
+    let billToEmail: string | null = null;
     const buildingMap = new Map<string, string>();
 
     if (consolidated) {
@@ -63,14 +67,18 @@ export async function GET(request: Request) {
       bills = (billsData ?? []) as typeof bills;
       if (!bills.length) return NextResponse.json({ error: "No bills for this period" }, { status: 404 });
       const { data: payerProfile } = await admin.from("profiles").select("name, surname, email").eq("id", payerId).single();
-      if (payerProfile) billToName = `${(payerProfile as { name: string }).name} ${(payerProfile as { surname: string }).surname}`;
+      if (payerProfile) {
+        billToName = `${(payerProfile as { name: string }).name} ${(payerProfile as { surname: string }).surname}`;
+        billToEmail = (payerProfile as { email?: string }).email ?? null;
+      }
+      billToRole = (myOwnerUnits.length && payerId === user.id) ? "Owner" : "Tenant";
       const unitIdsUsed = [...new Set(bills.map(b => b.unit_id))];
-      const units = (await admin.from("units").select("id, unit_name, building_id").in("id", unitIdsUsed)).data ?? [];
+      const units = (await admin.from("units").select("id, unit_name, building_id, size_m2").in("id", unitIdsUsed)).data ?? [];
       const buildIds = [...new Set(units.map((u: { building_id: string }) => u.building_id))];
       const buildings = (await admin.from("buildings").select("id, name, site_id").in("id", buildIds)).data ?? [];
       buildings.forEach((b: { id: string; name: string; site_id: string }) => { buildingMap.set(b.id, b.name); });
       const firstSiteId = (buildings[0] as { site_id: string })?.site_id;
-      if (firstSiteId) site = (await admin.from("sites").select("name, address, vat_account").eq("id", firstSiteId).single()).data;
+      if (firstSiteId) site = (await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", firstSiteId).single()).data;
     } else {
       const { data: bill, error: billErr } = await admin.from("bills")
         .select("id, unit_id, period_month, period_year, total_amount, paid_at, reference_code")
@@ -79,65 +87,253 @@ export async function GET(request: Request) {
       const { data: ownership } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id).eq("unit_id", bill.unit_id).single();
       if (!ownership) return NextResponse.json({ error: "You do not own this unit" }, { status: 403 });
       bills = [bill as (typeof bills)[0]];
-      const { data: unit } = await admin.from("units").select("id, unit_name, building_id").eq("id", bill.unit_id).single();
+      const { data: unit } = await admin.from("units").select("id, unit_name, building_id, size_m2").eq("id", bill.unit_id).single();
       if (!unit) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
       const { data: building } = await admin.from("buildings").select("id, name, site_id").eq("id", (unit as { building_id: string }).building_id).single();
       if (building?.site_id) {
-        site = (await admin.from("sites").select("name, address, vat_account").eq("id", (building as { site_id: string }).site_id).single()).data;
+        site = (await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", (building as { site_id: string }).site_id).single()).data;
         buildingMap.set((building as { id: string }).id, (building as { name: string }).name ?? "");
       }
       ownerProfile = (await admin.from("profiles").select("name, surname, email").eq("id", user.id).single()).data;
-      if (ownerProfile) billToName = `${ownerProfile.name} ${ownerProfile.surname}`;
+      if (ownerProfile) {
+        billToName = `${ownerProfile.name} ${ownerProfile.surname}`;
+        billToEmail = ownerProfile.email ?? null;
+      }
+      billToRole = "Owner";
+    }
+
+    const billIds = bills.map(b => b.id);
+    const { data: allBillLines } = await admin.from("bill_lines").select("bill_id, line_type, reference_id, description, amount").in("bill_id", billIds);
+    const billLinesByBill = new Map<string, { line_type: string; reference_id: string | null; description: string; amount: number }[]>();
+    (allBillLines ?? []).forEach((l: { bill_id: string; line_type: string; reference_id: string | null; description: string; amount: number }) => {
+      const list = billLinesByBill.get(l.bill_id) ?? [];
+      list.push({ line_type: l.line_type, reference_id: l.reference_id, description: l.description, amount: Number(l.amount) });
+      billLinesByBill.set(l.bill_id, list);
+    });
+
+    const serviceIds = [...new Set((allBillLines ?? [])
+      .filter((l: { line_type: string; reference_id: string | null }) => l.line_type === "service" && l.reference_id)
+      .map((l: { reference_id: string }) => l.reference_id))];
+    const { data: services } = await admin.from("services").select("id, name, pricing_model, price_value").in("id", serviceIds);
+    const serviceMap = new Map<string, { name: string; pricing_model: string; price_value: number }>();
+    (services ?? []).forEach((s: { id: string; name: string; pricing_model: string; price_value: number }) => {
+      serviceMap.set(s.id, { name: s.name, pricing_model: s.pricing_model, price_value: Number(s.price_value) });
+    });
+
+    const unitMapForPdf = new Map<string, { unit_name: string; size_m2: number | null }>();
+    const allUnitIds = [...new Set(bills.map(b => b.unit_id))];
+    const unitsForPdf = (await admin.from("units").select("id, unit_name, size_m2").in("id", allUnitIds)).data ?? [];
+    unitsForPdf.forEach((u: { id: string; unit_name: string; size_m2: number | null }) => {
+      unitMapForPdf.set(u.id, { unit_name: u.unit_name, size_m2: u.size_m2 != null ? Number(u.size_m2) : null });
+    });
+
+    let managerProfile: { name?: string; surname?: string; email?: string; phone?: string } | null = null;
+    if (site?.manager_id) {
+      managerProfile = (await admin.from("profiles").select("name, surname, email, phone").eq("id", site.manager_id).single()).data;
     }
 
     const periodLabel = `${MONTHS[bills[0].period_month - 1]} ${bills[0].period_year}`;
-    const totalAmount = bills.reduce((s, b) => s + Number(b.total_amount), 0);
+    const periodShort = `${MONTHS[bills[0].period_month - 1].slice(0, 3)}${String(bills[0].period_year).slice(-2)}`;
+    const subtotal = bills.reduce((s, b) => s + Number(b.total_amount), 0);
+    const taxPct = site?.tax_amount != null ? Number(site.tax_amount) : 0;
+    const taxAmount = Math.round((subtotal * taxPct / 100) * 100) / 100;
+    const grandTotal = Math.round((subtotal + taxAmount) * 100) / 100;
     const allPaid = bills.every(b => b.paid_at);
-    const paidDate = allPaid && bills[0].paid_at ? new Date(bills[0].paid_at).toLocaleDateString() : null;
-    const refCode = consolidated ? `INV-${periodLabel.replace(" ", "")}` : (bills[0] as { reference_code?: string }).reference_code ?? `BILL-${bills[0].id.slice(0, 8).toUpperCase()}`;
+    const paidDate = allPaid && bills[0].paid_at ? new Date(bills[0].paid_at).toLocaleDateString("en-GB") : null;
+
+    const payerId = consolidated ? (paymentResponsibleId ?? user.id) : user.id;
+    const siteId = site?.id ?? null;
+    const siteCode = (site?.name ?? "SITE").replace(/[^A-Za-z0-9]/g, "").toUpperCase().slice(0, 6) || "SITE";
+
+    let refCode: string;
+    if (siteId) {
+      const { data: existing } = await admin.from("invoice_references")
+        .select("reference_code")
+        .eq("site_id", siteId)
+        .eq("period_month", bills[0].period_month)
+        .eq("period_year", bills[0].period_year)
+        .eq("payment_responsible_id", payerId)
+        .maybeSingle();
+      if (existing?.reference_code) {
+        refCode = (existing as { reference_code: string }).reference_code;
+      } else {
+        const { data: seqResult } = await admin.rpc("get_next_invoice_number", { p_site_id: siteId });
+        const seq = (seqResult as number) ?? 1;
+        refCode = `INV-${siteCode}-${periodShort}-${String(seq).padStart(4, "0")}`;
+        const { error: insErr } = await admin.from("invoice_references").insert({
+          site_id: siteId,
+          period_month: bills[0].period_month,
+          period_year: bills[0].period_year,
+          payment_responsible_id: payerId,
+          reference_code: refCode,
+        }).select("reference_code").single();
+        if (insErr?.code === "23505") {
+          const { data: retry } = await admin.from("invoice_references")
+            .select("reference_code")
+            .eq("site_id", siteId)
+            .eq("period_month", bills[0].period_month)
+            .eq("period_year", bills[0].period_year)
+            .eq("payment_responsible_id", payerId)
+            .single();
+          refCode = (retry as { reference_code: string })?.reference_code ?? refCode;
+        }
+      }
+    } else {
+      refCode = consolidated ? `INV-${periodShort}-${bills[0].id.slice(0, 6).toUpperCase()}` : (bills[0] as { reference_code?: string }).reference_code ?? `BILL-${bills[0].id.slice(0, 8).toUpperCase()}`;
+    }
+    const issuedDate = new Date();
+    const dueDate = new Date(issuedDate);
+    dueDate.setMonth(dueDate.getMonth() + 1);
 
     const doc = new PDFDocument({ margin: 50, size: "A4" });
     const chunks: Buffer[] = [];
     doc.on("data", (chunk: Buffer) => chunks.push(chunk));
 
-    doc.fontSize(20).text("INVOICE", { align: "center" });
-    doc.moveDown(1);
+    let y = 50;
+    const pageWidth = doc.page.width - 100;
+
+    const logoPath = path.join(process.cwd(), "public", "domio-icon.png");
+    const logoPathFallback = path.join(process.cwd(), "public", "domio-logo.png");
+    if (fs.existsSync(logoPath)) {
+      doc.image(logoPath, 50, y, { width: 60 });
+    } else if (fs.existsSync(logoPathFallback)) {
+      doc.image(logoPathFallback, 50, y, { width: 100 });
+    }
+    doc.fontSize(22).fillColor("black").text("INVOICE", 50, y, { width: pageWidth, align: "right" });
+    y += 55;
+    doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
+    y += 18;
 
     doc.fontSize(10);
-    doc.text(site?.name ?? "Property Management", { continued: false });
-    if (site?.address) doc.text(site.address);
-    if (site?.vat_account) doc.text(`VAT: ${site.vat_account}`);
-    doc.moveDown(1);
+    doc.font("Helvetica-Bold").text("Issued by (invoice authority)", 50, y);
+    doc.font("Helvetica");
+    y += 14;
+    doc.text("Site:", 50, y);
+    doc.text(site?.name ?? "—", 120, y);
+    y += 12;
+    doc.text("Address:", 50, y);
+    doc.text(site?.address ?? "—", 120, y);
+    y += 12;
+    doc.text("Manager:", 50, y);
+    const managerName = managerProfile ? (`${managerProfile.name ?? ""} ${managerProfile.surname ?? ""}`.trim() || "—") : "—";
+    doc.text(managerName, 120, y);
+    y += 12;
+    doc.text("VAT:", 50, y);
+    doc.text(site?.vat_account ?? "—", 120, y);
+    y += 12;
+    doc.text("Email:", 50, y);
+    doc.text(managerProfile?.email ?? "—", 120, y);
+    y += 12;
+    doc.text("Phone:", 50, y);
+    doc.text(managerProfile?.phone ?? "—", 120, y);
+    y += 18;
 
-    doc.text("Bill to:", { underline: true });
-    doc.text(billToName);
-    if (ownerProfile?.email) doc.text(ownerProfile.email);
-    doc.moveDown(1);
+    doc.font("Helvetica-Bold").text("Billing period:", 50, y);
+    doc.font("Helvetica").text(periodLabel, 150, y);
+    doc.font("Helvetica-Bold").text("Issued date:", 280, y);
+    doc.font("Helvetica").text(issuedDate.toLocaleDateString("en-GB"), 360, y);
+    y += 14;
+    doc.font("Helvetica-Bold").text("Reference:", 50, y);
+    doc.font("Helvetica").text(refCode, 150, y);
+    y += 28;
 
-    doc.text(`Period: ${periodLabel}`);
-    doc.text(`Invoice date: ${new Date().toLocaleDateString("en-GB")}`);
-    doc.moveDown(1);
+    doc.font("Helvetica-Bold").text("Bill to:", 50, y);
+    doc.font("Helvetica").text(`${billToName} (${billToRole})`, 150, y);
+    y += 14;
+    if (billToEmail) { doc.text(billToEmail, 50, y); y += 6; }
+    y += 12;
 
-    doc.text("Description", { underline: true });
-    const unitMapForPdf = new Map<string, string>();
-    if (!consolidated) {
-      const u = (await admin.from("units").select("id, unit_name").eq("id", bills[0].unit_id).single()).data;
-      if (u) unitMapForPdf.set(bills[0].unit_id, (u as { unit_name: string }).unit_name);
-    } else {
-      const unitsForPdf = (await admin.from("units").select("id, unit_name").in("id", [...new Set(bills.map(b => b.unit_id))])).data ?? [];
-      unitsForPdf.forEach((u: { id: string; unit_name: string }) => unitMapForPdf.set(u.id, u.unit_name));
+    doc.font("Helvetica-Bold").text("Itemized bill", 50, y);
+    y += 18;
+
+    const itemizedRows: { desc: string; qty: string; price: string; amt: string }[] = [];
+    for (const b of bills) {
+      const unitInfo = unitMapForPdf.get(b.unit_id);
+      const unitName = unitInfo?.unit_name ?? "—";
+      const lines = billLinesByBill.get(b.id) ?? [];
+      for (const line of lines) {
+        if (line.line_type === "service" && line.reference_id) {
+          const svc = serviceMap.get(line.reference_id);
+          const isPerM2 = svc?.pricing_model === "per_m2";
+          const qty = isPerM2 ? (unitInfo?.size_m2 ?? 0) : 1;
+          const price = svc?.price_value ?? 0;
+          const amt = line.amount;
+          const desc = (svc?.name ?? line.description) + (unitName ? ` · ${unitName}` : "");
+          const qtyStr = isPerM2 ? `${qty}m²` : String(qty);
+          itemizedRows.push({ desc, qty: qtyStr, price: price.toFixed(2), amt: amt.toFixed(2) });
+        } else if (line.line_type === "expense") {
+          itemizedRows.push({ desc: `${line.description} · ${unitName}`, qty: "1", price: line.amount.toFixed(2), amt: line.amount.toFixed(2) });
+        } else {
+          itemizedRows.push({ desc: `${line.description} · ${unitName}`, qty: "1", price: line.amount.toFixed(2), amt: line.amount.toFixed(2) });
+        }
+      }
     }
-    bills.forEach(b => {
-      const unitName = unitMapForPdf.get(b.unit_id) ?? "—";
-      doc.text(`  ${unitName}: ${Number(b.total_amount).toFixed(2)}`);
-    });
-    doc.moveDown(0.5);
-    doc.fontSize(14).text(`Total: ${totalAmount.toFixed(2)}`, { align: "right" });
-    doc.moveDown(1);
 
-    doc.fontSize(9).fillColor("gray").text(
+    if (itemizedRows.length) {
+      const colDesc = 50;
+      const colQty = 280;
+      const colPrice = 330;
+      const colAmt = 420;
+      doc.fontSize(9).fillColor("#666666");
+      doc.text("Description", colDesc, y);
+      doc.text("Qty", colQty, y);
+      doc.text("Price", colPrice, y);
+      doc.text("Amount", colAmt, y);
+      y += 14;
+      doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
+      y += 12;
+      doc.fillColor("black");
+      for (const row of itemizedRows) {
+        doc.text(row.desc, colDesc, y, { width: 220 });
+        doc.text(row.qty, colQty, y);
+        doc.text(row.price, colPrice, y);
+        doc.text(row.amt, colAmt, y);
+        y += 14;
+      }
+      y += 8;
+    } else {
+      bills.forEach(b => {
+        const unitName = unitMapForPdf.get(b.unit_id)?.unit_name ?? "—";
+        doc.text(`  ${unitName}: ${Number(b.total_amount).toFixed(2)}`, 50, y);
+        y += 14;
+      });
+      y += 8;
+    }
+
+    doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
+    y += 14;
+    doc.font("Helvetica").text("Subtotal:", 50, y);
+    doc.text(subtotal.toFixed(2), 420, y, { align: "right", width: 80 });
+    y += 16;
+    doc.text(`Tax (${taxPct}%):`, 50, y);
+    doc.text(taxAmount.toFixed(2), 420, y, { align: "right", width: 80 });
+    y += 16;
+    doc.font("Helvetica-Bold").text("Grand total:", 50, y);
+    doc.text(grandTotal.toFixed(2), 420, y, { align: "right", width: 80 });
+    y += 24;
+
+    doc.font("Helvetica-Bold").text("Bank account & payment methods", 50, y);
+    doc.font("Helvetica");
+    y += 14;
+    doc.text("Bank name:", 50, y);
+    doc.text(site?.bank_name ?? "—", 120, y);
+    y += 12;
+    doc.text("IBAN:", 50, y);
+    doc.text(site?.iban ?? "—", 120, y);
+    y += 12;
+    doc.text("SWIFT:", 50, y);
+    doc.text(site?.swift_code ?? "—", 120, y);
+    y += 12;
+    doc.text("Payment method: Bank transfer. Use reference " + refCode + " when paying.", 50, y);
+    y += 24;
+
+    doc.font("Helvetica-Bold").text("Payment due date:", 50, y);
+    doc.font("Helvetica").text(dueDate.toLocaleDateString("en-GB") + " (1 month after issued)", 200, y);
+    y += 20;
+
+    doc.fontSize(9).fillColor("#999999").text(
       allPaid && paidDate ? `Paid on ${paidDate}` : "Status: Unpaid",
-      { align: "center" }
+      50, y, { align: "center", width: pageWidth }
     );
 
     const endPromise = new Promise<void>((resolve) => doc.on("end", () => resolve()));

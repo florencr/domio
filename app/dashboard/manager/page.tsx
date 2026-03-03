@@ -1328,9 +1328,151 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
   );
 }
 
+// ─── Documents Config (contracts, maintenance docs per building/unit) ─────
+function DocumentsCfg({ data }: { data: Data }) {
+  const [buildingId, setBuildingId] = useState<string>("");
+  const [unitId, setUnitId] = useState<string>("");
+  const [docs, setDocs] = useState<{ id: string; name: string; category: string; created_at: string; unit_id: string | null }[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
+
+  const unitsInBuilding = data.units.filter(u => u.building_id === buildingId);
+
+  const loadDocs = useCallback(() => {
+    if (!buildingId) { setDocs([]); return; }
+    setLoading(true);
+    let u = `/api/documents?buildingId=${buildingId}`;
+    if (unitId) u += `&unitId=${unitId}`;
+    fetch(u).then(r => r.ok ? r.json() : { documents: [] }).then(j => { setDocs(j.documents ?? []); setLoading(false); });
+  }, [buildingId, unitId]);
+
+  useEffect(() => { loadDocs(); }, [loadDocs]);
+
+  async function upload(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = fileInput?.files?.[0];
+    const cat = (form.querySelector('select[name="category"]') as HTMLSelectElement)?.value || "other";
+    if (!file || !buildingId) { setMsg({ text: "Select building and file", ok: false }); return; }
+    setUploading(true); setMsg({ text: "", ok: true });
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("buildingId", buildingId);
+    if (unitId) fd.append("unitId", unitId);
+    fd.append("category", cat);
+    const res = await fetch("/api/documents", { method: "POST", body: fd });
+    setUploading(false);
+    if (res.ok) { setMsg({ text: "Uploaded.", ok: true }); fileInput.value = ""; loadDocs(); }
+    else { const j = await res.json().catch(() => ({})); setMsg({ text: j.error || "Upload failed", ok: false }); }
+  }
+
+  async function remove(id: string) {
+    const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+    if (res.ok) { loadDocs(); } else { setMsg({ text: "Delete failed", ok: false }); }
+  }
+
+  async function download(id: string) {
+    const res = await fetch(`/api/documents/${id}`);
+    const j = await res.json().catch(() => ({}));
+    if (j.url) window.open(j.url, "_blank");
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle>Documents</CardTitle><p className="text-sm text-muted-foreground">Contracts, maintenance docs per building or unit.</p></CardHeader>
+      <CardContent className="space-y-4">
+        {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>}
+        <div className="flex flex-wrap gap-2 items-center">
+          <Label className="shrink-0">Building</Label>
+          <Select value={buildingId} onValueChange={v => { setBuildingId(v); setUnitId(""); }}>
+            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Select building" /></SelectTrigger>
+            <SelectContent>
+              {data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+          {buildingId && unitsInBuilding.length > 0 && (
+            <>
+              <Label className="shrink-0 ml-2">Unit (optional)</Label>
+              <Select value={unitId || "__building__"} onValueChange={v => setUnitId(v === "__building__" ? "" : v)}>
+                <SelectTrigger className="w-[140px]"><SelectValue placeholder="All / building" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__building__">— Building level —</SelectItem>
+                  {unitsInBuilding.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </>
+          )}
+        </div>
+        {buildingId && (
+          <form onSubmit={upload} className="flex flex-wrap gap-2 items-end p-3 border rounded-lg">
+            <div><Label>File</Label><Input type="file" name="file" className="mt-1" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" /></div>
+            <div><Label>Category</Label><select name="category" className="flex h-9 rounded-md border px-3 mt-1 text-sm"><option value="contract">Contract</option><option value="maintenance">Maintenance</option><option value="other">Other</option></select></div>
+            {unitId && <input type="hidden" name="unitId" value={unitId} />}
+            <Button type="submit" disabled={uploading}>{uploading ? "Uploading..." : "Upload"}</Button>
+          </form>
+        )}
+        {buildingId && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Documents</p>
+            {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+            {!loading && docs.map(d => (
+              <div key={d.id} className="flex items-center justify-between py-2 px-3 rounded border bg-muted/30 text-sm">
+                <div>
+                  <span className="font-medium">{d.name}</span>
+                  <span className="text-muted-foreground ml-2">({d.category})</span>
+                  <span className="text-muted-foreground ml-2 text-xs">{new Date(d.created_at).toLocaleDateString()}</span>
+                </div>
+                <div className="flex gap-1">
+                  <Button variant="outline" size="sm" onClick={() => download(d.id)}>Download</Button>
+                  <Button variant="ghost" size="sm" onClick={() => remove(d.id)} className="text-red-600">Delete</Button>
+                </div>
+              </div>
+            ))}
+            {!loading && !docs.length && <p className="text-sm text-muted-foreground">No documents.</p>}
+          </div>
+        )}
+        {!buildingId && data.buildings.length > 0 && <p className="text-sm text-muted-foreground">Select a building to view or upload documents.</p>}
+        {!data.buildings.length && <p className="text-sm text-muted-foreground">No buildings. Add buildings first.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
+// ─── Audit Config (manager sees own site's audit log) ───────────────────────
+function AuditCfg() {
+  const [entries, setEntries] = useState<{ id: string; created_at: string; user_email: string | null; action: string; entity_type: string; entity_label: string | null }[]>([]);
+  const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    fetch("/api/admin/audit-log?limit=50")
+      .then(r => r.ok ? r.json() : { entries: [] })
+      .then(j => { setEntries(j.entries ?? []); setLoading(false); });
+  }, []);
+  const formatDate = (d: string) => new Date(d).toLocaleString();
+  return (
+    <Card>
+      <CardHeader><CardTitle>Audit Log</CardTitle><p className="text-sm text-muted-foreground">Recent changes for your site.</p></CardHeader>
+      <CardContent>
+        {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+        {!loading && (
+          <div className="space-y-2 max-h-[300px] overflow-y-auto text-sm">
+            {entries.map(e => (
+              <div key={e.id} className="py-2 px-3 rounded border bg-muted/30">
+                <span className="text-muted-foreground">{formatDate(e.created_at)}</span> · <span className="font-medium">{e.user_email ?? "system"}</span> <span className="text-amber-600">{e.action}</span> {e.entity_type}{e.entity_label ? ` (${e.entity_label})` : ""}
+              </div>
+            ))}
+          </div>
+        )}
+        {!loading && !entries.length && <p className="text-muted-foreground">No entries yet.</p>}
+      </CardContent>
+    </Card>
+  );
+}
+
 // ─── Configuration Tab ────────────────────────────────────────────────────
 function ConfigTab({ data, reload, configSubTab, setConfigSubTab }: { data: Data; reload: () => void; configSubTab: string; setConfigSubTab: (v: string) => void }) {
-  const tabs = ["buildings","units","unit-types","services","expenses","vendors","categories","users","notifications"];
+  const tabs = ["buildings","units","unit-types","services","expenses","vendors","categories","users","documents","notifications","audit"];
   return (
     <div className="mt-2">
       <div className="flex flex-wrap gap-1 mb-4">
@@ -1346,7 +1488,9 @@ function ConfigTab({ data, reload, configSubTab, setConfigSubTab }: { data: Data
       {configSubTab==="vendors" && <VendorsCfg data={data} reload={reload} />}
       {configSubTab==="categories" && <CategoriesCfg data={data} reload={reload} />}
       {configSubTab==="users" && <UsersCfg data={data} reload={reload} />}
+      {configSubTab==="documents" && <DocumentsCfg data={data} />}
       {configSubTab==="notifications" && <NotificationsCfg unitTypes={data.unitTypes} onBack={() => setConfigSubTab("buildings")} />}
+      {configSubTab==="audit" && <AuditCfg />}
     </div>
   );
 }

@@ -12,7 +12,7 @@ import { ArrowLeft, Plus, Pencil, Trash2 } from "lucide-react";
 import { DomioLogo } from "@/components/DomioLogo";
 
 type Profile = { id: string; name: string; surname: string; email: string; phone?: string | null };
-type Site = { id: string; name: string; address?: string; vat_account?: string | null; manager_id: string };
+type Site = { id: string; name: string; address?: string; vat_account?: string | null; bank_name?: string | null; iban?: string | null; swift_code?: string | null; tax_amount?: number | null; manager_id: string };
 type Building = { id: string; name: string; site_id: string | null };
 
 export default function EditManagerPage() {
@@ -26,7 +26,7 @@ export default function EditManagerPage() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
 
   const [managerForm, setManagerForm] = useState({ name: "", surname: "", email: "", phone: "", password: "" });
-  const [siteForm, setSiteForm] = useState({ name: "", address: "", vat_account: "" });
+  const [siteForm, setSiteForm] = useState({ name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
   const [buildingForm, setBuildingForm] = useState({ name: "", address: "" });
   const [editingBuilding, setEditingBuilding] = useState<Building | null>(null);
 
@@ -58,7 +58,7 @@ export default function EditManagerPage() {
     setSite(s);
     setBuildings(siteBuildings);
     setManagerForm({ name: m.name, surname: m.surname, email: m.email, phone: m.phone || "", password: "" });
-    setSiteForm({ name: s?.name || "", address: s?.address || "", vat_account: s?.vat_account || "" });
+    setSiteForm({ name: s?.name || "", address: s?.address || "", vat_account: s?.vat_account || "", bank_name: s?.bank_name || "", iban: s?.iban || "", swift_code: s?.swift_code || "", tax_amount: s?.tax_amount != null ? String(s.tax_amount) : "" });
     setLoading(false);
   };
 
@@ -88,7 +88,7 @@ export default function EditManagerPage() {
     const res = await fetch("/api/admin/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ manager_id: managerId, name: siteForm.name, address: siteForm.address, vat_account: siteForm.vat_account || null }),
+      body: JSON.stringify({ manager_id: managerId, name: siteForm.name, address: siteForm.address, vat_account: siteForm.vat_account || null, bank_name: siteForm.bank_name || null, iban: siteForm.iban || null, swift_code: siteForm.swift_code || null, tax_amount: siteForm.tax_amount ? parseFloat(siteForm.tax_amount) : null }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
@@ -106,7 +106,7 @@ export default function EditManagerPage() {
     const res = await fetch(`/api/admin/sites/${site.id}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: siteForm.name, address: siteForm.address, vat_account: siteForm.vat_account || null }),
+      body: JSON.stringify({ name: siteForm.name, address: siteForm.address, vat_account: siteForm.vat_account || null, bank_name: siteForm.bank_name || null, iban: siteForm.iban || null, swift_code: siteForm.swift_code || null, tax_amount: siteForm.tax_amount ? parseFloat(siteForm.tax_amount) : null }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
@@ -211,6 +211,10 @@ export default function EditManagerPage() {
                 <div><Label>Site name</Label><Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} required /></div>
                 <div><Label>Address</Label><Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
                 <div><Label>VAT account</Label><Input value={siteForm.vat_account} onChange={e => setSiteForm({ ...siteForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
+                <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteForm.tax_amount} onChange={e => setSiteForm({ ...siteForm, tax_amount: e.target.value })} placeholder="e.g. 20 for 20%" /></div>
+                <div><Label>Bank name</Label><Input value={siteForm.bank_name} onChange={e => setSiteForm({ ...siteForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
+                <div><Label>IBAN</Label><Input value={siteForm.iban} onChange={e => setSiteForm({ ...siteForm, iban: e.target.value })} placeholder="e.g. AL47 2121 1009 0000 0002 3569 8741" /></div>
+                <div><Label>SWIFT code</Label><Input value={siteForm.swift_code} onChange={e => setSiteForm({ ...siteForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
                 <Button type="submit">Update Site</Button>
               </form>
             ) : (
@@ -218,6 +222,10 @@ export default function EditManagerPage() {
                 <div><Label>Site name</Label><Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="e.g. Building Complex A" required /></div>
                 <div><Label>Address</Label><Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
                 <div><Label>VAT account</Label><Input value={siteForm.vat_account} onChange={e => setSiteForm({ ...siteForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
+                <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteForm.tax_amount} onChange={e => setSiteForm({ ...siteForm, tax_amount: e.target.value })} placeholder="e.g. 20 for 20%" /></div>
+                <div><Label>Bank name</Label><Input value={siteForm.bank_name} onChange={e => setSiteForm({ ...siteForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
+                <div><Label>IBAN</Label><Input value={siteForm.iban} onChange={e => setSiteForm({ ...siteForm, iban: e.target.value })} placeholder="e.g. AL47 2121 1009 0000 0002 3569 8741" /></div>
+                <div><Label>SWIFT code</Label><Input value={siteForm.swift_code} onChange={e => setSiteForm({ ...siteForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
                 <Button type="submit">Create Site</Button>
               </form>
             )}

@@ -205,3 +205,12 @@ CREATE POLICY "services_select" ON services FOR SELECT
 DROP POLICY IF EXISTS "expenses_select_authenticated" ON expenses;
 CREATE POLICY "expenses_select" ON expenses FOR SELECT
   USING (public.is_admin() OR (public.is_manager() AND (site_id = public.my_site_id() OR site_id IS NULL)));
+
+-- ========== 039, 041, 042, 043: VAT, address, bank details, tax ==========
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS address TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS vat_account TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS bank_account TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS bank_name TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS iban TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS swift_code TEXT;
+ALTER TABLE sites ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(5,2);

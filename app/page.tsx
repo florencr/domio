@@ -69,10 +69,6 @@ export default function HomePage() {
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-muted/30">
       <main className="flex flex-col items-center gap-6 text-center max-w-sm w-full">
-        <Image src="/domio-icon.png" alt="Domio" width={160} height={160} className="mx-auto" priority />
-        <p className="text-muted-foreground text-sm">
-          Condo Management (HOA)
-        </p>
         {user ? (
           <div className="flex flex-col gap-3 w-full">
             <Button asChild className="w-full">
@@ -87,8 +83,9 @@ export default function HomePage() {
         ) : (
           <Card className="w-full">
             <CardHeader>
-              <CardTitle className="flex justify-center">
+              <CardTitle className="flex flex-col items-center gap-1">
                 <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
+                <span className="text-muted-foreground text-sm font-normal">Condo Management (HOA)</span>
               </CardTitle>
               <CardDescription>Sign in to your account</CardDescription>
             </CardHeader>
