@@ -235,7 +235,7 @@ export default function EditManagerPage() {
                   <div><Label>Address</Label><Input value={buildingForm.address} onChange={e => setBuildingForm({ ...buildingForm, address: e.target.value })} required /></div>
                   <div className="flex gap-2">
                     <Button type="submit">Save</Button>
-                    <Button type="button" variant="outline" onClick={() => { setEditingBuilding(null); setBuildingForm({ name: "" }); }}>Cancel</Button>
+                    <Button type="button" variant="outline" onClick={() => { setEditingBuilding(null); setBuildingForm({ name: "", address: "" }); }}>Cancel</Button>
                   </div>
                 </form>
               ) : (
@@ -252,7 +252,7 @@ export default function EditManagerPage() {
                     <li key={b.id} className="flex items-center justify-between py-2 border-b">
                       <div><span className="font-medium">{b.name}</span></div>
                       <div className="flex gap-2">
-                        <Button variant="ghost" size="icon" onClick={() => { setEditingBuilding(b); setBuildingForm({ name: b.name }); }}><Pencil className="size-4" /></Button>
+                        <Button variant="ghost" size="icon" onClick={() => { setEditingBuilding(b); setBuildingForm({ name: b.name, address: "" }); }}><Pencil className="size-4" /></Button>
                         <Button variant="ghost" size="icon" onClick={() => deleteBuilding(b.id)}><Trash2 className="size-4 text-red-600" /></Button>
                       </div>
                     </li>
