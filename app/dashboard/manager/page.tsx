@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -259,7 +259,7 @@ export default function ManagerPage() {
         <div>
           <Link href="/dashboard/manager" className="flex items-center gap-2">
             <DomioLogo className="h-9 w-auto" />
-            <span className="text-xs text-muted-foreground">Manager</span>
+            <span className="text-xs text-muted-foreground whitespace-nowrap">{data.site?.name ? `${data.site.name} Manager` : "Manager"}</span>
           </Link>
         </div>
         <div className="flex items-center gap-2">
@@ -278,10 +278,14 @@ export default function ManagerPage() {
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={signOut} className="gap-2 cursor-pointer">
+                <LogOut className="size-4" />
+                Logout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button variant="ghost" size="icon" onClick={() => setTab("config")} title="Configuration"><Settings className="size-5" /></Button>
-          <Button variant="outline" size="sm" onClick={signOut}><LogOut className="size-4 mr-1" />Logout</Button>
         </div>
       </header>
 
@@ -326,15 +330,15 @@ export default function ManagerPage() {
             <TabsTrigger value="config" className="flex items-center gap-2"><Settings className="size-4" />Config</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-4 pb-6">
-          <TabsList className="grid w-full grid-cols-4 h-16 min-h-[64px] p-1.5">
-            <TabsTrigger value="billing" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><FileText className="size-5" />Billing</TabsTrigger>
-            <TabsTrigger value="expenses" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><Wallet className="size-5" />Expenses</TabsTrigger>
-            <TabsTrigger value="payments" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><CreditCard className="size-5" />Payments</TabsTrigger>
-            <TabsTrigger value="ledger" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><BookOpen className="size-5" />Ledger</TabsTrigger>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-3 pb-4">
+          <TabsList className="grid w-full grid-cols-4 h-12 min-h-[48px] p-1.5 rounded-lg">
+            <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="expenses" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Wallet className="size-4" />Expenses</TabsTrigger>
+            <TabsTrigger value="payments" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><CreditCard className="size-4" />Payments</TabsTrigger>
+            <TabsTrigger value="ledger" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><BookOpen className="size-4" />Ledger</TabsTrigger>
           </TabsList>
         </div>
-        <div className="pb-28 md:pb-0">
+        <div className="pb-24 md:pb-0">
         <TabsContent value="billing"><BillingTab data={data} reload={load} addBills={newBills => setData(prev => ({ ...prev, bills: [...(prev.bills || []), ...newBills] }))} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab data={data} reload={load} /></TabsContent>
         <TabsContent value="payments"><PaymentsTab bills={data.bills} units={data.units} profiles={data.profiles} unitOwners={data.unitOwners} /></TabsContent>
@@ -358,6 +362,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   const [filterUnitType, setFilterUnitType] = useState<string>("all");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
 
   const unitMap = new Map(data.units.map(u => [u.id, u]));
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
@@ -523,9 +528,16 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-end">
+          <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex flex-wrap gap-2 items-end pb-3">
             <div><Label className="text-xs">Period</Label>
               <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
@@ -551,6 +563,8 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                 <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem><SelectItem value="in_process">In process</SelectItem></SelectContent>
               </Select>
+            </div>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -649,6 +663,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   const [filterCategory, setFilterCategory] = useState<string>("all");
   const [filterVendor, setFilterVendor] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
 
   const recurrentTemplates = expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
   const allExpenseRecords = expenses.filter(e => e.period_month != null);
@@ -811,9 +826,16 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-end">
+          <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex flex-wrap gap-2 items-end pb-3">
             <div><Label className="text-xs">Period</Label>
               <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
@@ -839,6 +861,8 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                 <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="recurrent">Recurrent</SelectItem><SelectItem value="ad_hoc">Ad-hoc</SelectItem></SelectContent>
               </Select>
+            </div>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -896,6 +920,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
 function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; units: Unit[]; profiles: Profile[]; unitOwners: UnitOwner[] }) {
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
   const unitMap = new Map(units.map(u => [u.id, u]));
   const ownerMap = new Map(unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
   const profileMap = new Map(profiles.map(p => [p.id, p]));
@@ -928,9 +953,16 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
         <CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-green-600">{totalPaid.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">{paid.length} payments received</p></CardContent>
       </Card>
       <Card>
-        <CardHeader><CardTitle>Payment History ({paid.length}{paidRaw.length !== bills.filter(b=>b.paid_at).length ? ` of ${bills.filter(b=>b.paid_at).length}` : ""})</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardTitle>Payment History ({paid.length}{paidRaw.length !== bills.filter(b=>b.paid_at).length ? ` of ${bills.filter(b=>b.paid_at).length}` : ""})</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-end">
+          <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex flex-wrap gap-2 items-end pb-3">
             <div><Label className="text-xs">Period</Label>
               <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
@@ -944,6 +976,8 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
                 <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
               </Select>
+            </div>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -991,6 +1025,7 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
   const [filterVendor, setFilterVendor] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
+  const [showFilters, setShowFilters] = useState(false);
   const unitMap = new Map(units.map(u => [u.id, u]));
   const unitNameMap = new Map(units.map(u => [u.id, u.unit_name]));
 
@@ -1042,9 +1077,16 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
         <Card className="py-2 px-4 gap-1"><CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Balance</CardTitle></CardHeader><CardContent className="pb-2 pt-0 px-0"><p className={`text-lg font-extrabold ${totalIn-totalOut>=0?"text-blue-600":"text-red-600"}`}>{(totalIn-totalOut).toFixed(2)}</p></CardContent></Card>
       </div>
       <Card>
-        <CardHeader><CardTitle>Full Ledger ({rows.length}{rows.length !== bills.length + expenses.filter(e=>e.period_month!=null).length ? ` of ${bills.length + expenses.filter(e=>e.period_month!=null).length}` : ""} entries)</CardTitle></CardHeader>
+        <CardHeader className="flex flex-row items-start justify-between gap-4">
+          <CardTitle>Full Ledger ({rows.length}{rows.length !== bills.length + expenses.filter(e=>e.period_month!=null).length ? ` of ${bills.length + expenses.filter(e=>e.period_month!=null).length}` : ""} entries)</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+            <SlidersHorizontal className="size-4" />
+          </Button>
+        </CardHeader>
         <CardContent className="space-y-3">
-          <div className="flex flex-wrap gap-2 items-end">
+          <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+            <div className="min-h-0 overflow-hidden">
+              <div className="flex flex-wrap gap-2 items-end pb-3">
             <div><Label className="text-xs">Period</Label>
               <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
@@ -1068,13 +1110,13 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
             <div><Label className="text-xs">Category</Label>
               <Select value={filterCategory} onValueChange={setFilterCategory}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">All categories</SelectItem>{[...new Set(expenses.map(e=>e.category))].sort().map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="all">All categories</SelectItem>{[...new Set(expenses.map(e=>e.category).filter((c): c is string => !!c))].sort().map(c=><SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label className="text-xs">Vendor</Label>
               <Select value={filterVendor} onValueChange={setFilterVendor}>
                 <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                <SelectContent><SelectItem value="all">All vendors</SelectItem>{[...new Set(expenses.map(e=>e.vendor))].sort().map(v=><SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                <SelectContent><SelectItem value="all">All vendors</SelectItem>{[...new Set(expenses.map(e=>e.vendor).filter((v): v is string => !!v))].sort().map(v=><SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
               </Select>
             </div>
             <div><Label className="text-xs">Type</Label>
@@ -1088,6 +1130,8 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
                 <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
                 <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem></SelectContent>
               </Select>
+            </div>
+              </div>
             </div>
           </div>
           <div className="overflow-x-auto">

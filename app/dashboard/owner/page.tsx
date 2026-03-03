@@ -367,14 +367,14 @@ export default function OwnerPage() {
             <TabsTrigger value="notifications" className="flex items-center gap-2"><Bell className="size-4" />Notifications</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-4 pb-6">
-          <TabsList className="grid w-full grid-cols-3 h-16 min-h-[64px] p-1.5">
-            <TabsTrigger value="units" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><Home className="size-5" />My Units</TabsTrigger>
-            <TabsTrigger value="billing" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><FileText className="size-5" />Billing</TabsTrigger>
-            <TabsTrigger value="ledger" className="py-4 text-sm font-semibold flex flex-col items-center gap-1"><BookOpen className="size-5" />Ledger</TabsTrigger>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-3 pb-4">
+          <TabsList className="grid w-full grid-cols-3 h-12 min-h-[48px] p-1.5 rounded-lg">
+            <TabsTrigger value="units" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Home className="size-4" />My Units</TabsTrigger>
+            <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="ledger" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><BookOpen className="size-4" />Ledger</TabsTrigger>
           </TabsList>
         </div>
-        <div className="pb-28 md:pb-0">
+        <div className="pb-24 md:pb-0">
         <TabsContent value="units">
           <div className="space-y-4 mt-2">
             <Card>
