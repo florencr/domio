@@ -1,18 +1,29 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient } from "@supabase/supabase-js";
+import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+
+function adminClient() {
+  return createClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+}
 
 export async function GET() {
   try {
-    const sb = await createClient();
+    const sb = await createServerClient();
     const { data: { user } } = await sb.auth.getUser();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
     if (profile?.role !== "manager") return NextResponse.json({ error: "Managers only" }, { status: 403 });
 
-    const { data, error } = await sb
+    const admin = adminClient();
+    const { data, error } = await admin
       .from("notifications")
       .select("id, title, body, created_at, target_audience")
+      .eq("created_by", user.id)
       .order("created_at", { ascending: false })
       .limit(200);
 
@@ -23,7 +34,7 @@ export async function GET() {
     const countMap = new Map<string, number>();
 
     if (ids.length > 0) {
-      const { data: recs } = await sb
+      const { data: recs } = await admin
         .from("notification_recipients")
         .select("notification_id")
         .in("notification_id", ids);

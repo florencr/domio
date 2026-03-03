@@ -13,22 +13,33 @@ export default function HomePage() {
 
   useEffect(() => {
     const supabase = createClient();
-    supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) {
-        setUser(null);
+    let done = false;
+    const timeout = setTimeout(() => {
+      if (!done) { done = true; setLoading(false); }
+    }, 8000);
+    supabase.auth.getSession()
+      .then(async ({ data: { session } }) => {
+        if (done) return;
+        if (!session?.user) {
+          setUser(null);
+          setLoading(false);
+          done = true;
+          return;
+        }
+        setUser(session.user);
+        const { data: profile } = await supabase.from("profiles").select("role").eq("id", session.user.id).single();
+        setRole(profile?.role ?? null);
         setLoading(false);
-        return;
-      }
-      setUser(session.user);
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", session.user.id).single();
-      setRole(profile?.role ?? null);
-      setLoading(false);
-    });
+        done = true;
+      })
+      .catch(() => { if (!done) { done = true; setLoading(false); } })
+      .finally(() => clearTimeout(timeout));
+    return () => clearTimeout(timeout);
   }, []);
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
 
-  const dashboardHref = role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+  const dashboardHref = role === "admin" ? "/dashboard/admin" : role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-muted/30">

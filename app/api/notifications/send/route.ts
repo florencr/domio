@@ -29,29 +29,35 @@ export async function POST(request: Request) {
     const unitTypes = Array.isArray(targetUnitTypes) ? targetUnitTypes as string[] : null;
     const unpaid = !!unpaidOnly;
 
-    // Compute recipient user IDs
+    // Get manager's site and units in that site
+    const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).maybeSingle();
+    const siteId = site?.id ?? null;
+    let siteUnitIds = new Set<string>();
+    if (siteId) {
+      const { data: siteBuildings } = await admin.from("buildings").select("id").eq("site_id", siteId);
+      const buildingIds = new Set((siteBuildings ?? []).map((b: { id: string }) => b.id));
+      const { data: siteUnits } = await admin.from("units").select("id").in("building_id", [...buildingIds]);
+      (siteUnits ?? []).forEach((u: { id: string }) => siteUnitIds.add(u.id));
+    }
+
+    // Compute recipient user IDs - only from this manager's site
     let userIds = new Set<string>();
 
     if (audience === "owners" || audience === "both") {
-      const { data: owners } = await admin.from("unit_owners").select("owner_id");
-      (owners ?? []).forEach((r: { owner_id: string }) => userIds.add(r.owner_id));
-      if (userIds.size === 0) {
-        const { data: ownerProfiles } = await admin.from("profiles").select("id").eq("role", "owner");
-        (ownerProfiles ?? []).forEach((p: { id: string }) => userIds.add(p.id));
+      if (siteUnitIds.size > 0) {
+        const { data: owners } = await admin.from("unit_owners").select("owner_id, unit_id").in("unit_id", [...siteUnitIds]);
+        (owners ?? []).forEach((r: { owner_id: string }) => userIds.add(r.owner_id));
       }
     }
     if (audience === "tenants" || audience === "both") {
-      const { data: tenants } = await admin.from("unit_tenant_assignments").select("tenant_id");
-      (tenants ?? []).forEach((r: { tenant_id: string }) => userIds.add(r.tenant_id));
-      const hadTenantsFromAssignments = tenants && tenants.length > 0;
-      if (!hadTenantsFromAssignments) {
-        const { data: tenantProfiles } = await admin.from("profiles").select("id").eq("role", "tenant");
-        (tenantProfiles ?? []).forEach((p: { id: string }) => userIds.add(p.id));
+      if (siteUnitIds.size > 0) {
+        const { data: tenants } = await admin.from("unit_tenant_assignments").select("tenant_id, unit_id").in("unit_id", [...siteUnitIds]);
+        (tenants ?? []).forEach((r: { tenant_id: string }) => userIds.add(r.tenant_id));
       }
     }
 
-    if (unitTypes && unitTypes.length > 0) {
-      const { data: unitsByType } = await admin.from("units").select("id").in("type", unitTypes);
+    if (unitTypes && unitTypes.length > 0 && siteUnitIds.size > 0) {
+      const { data: unitsByType } = await admin.from("units").select("id").in("id", [...siteUnitIds]).in("type", unitTypes);
       const unitIdSet = new Set((unitsByType ?? []).map((u: { id: string }) => u.id));
       const filtered = new Set<string>();
       for (const uid of userIds) {
@@ -63,13 +69,13 @@ export async function POST(request: Request) {
       userIds = filtered;
     }
 
-    if (unpaid) {
-      const { data: bills } = await admin.from("bills").select("unit_id").is("paid_at", null);
+    if (unpaid && siteUnitIds.size > 0) {
+      const { data: bills } = await admin.from("bills").select("unit_id").in("unit_id", [...siteUnitIds]).is("paid_at", null);
       const unpaidUnitIds = new Set((bills ?? []).map((b: { unit_id: string }) => b.unit_id));
       const unpaidUserIds = new Set<string>();
       for (const uid of userIds) {
-        const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", uid);
-        const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid);
+        const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", uid).in("unit_id", [...siteUnitIds]);
+        const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", uid).in("unit_id", [...siteUnitIds]);
         const units = new Set([...(ownerUnits ?? []).map((r: { unit_id: string }) => r.unit_id), ...(tenantUnits ?? []).map((r: { unit_id: string }) => r.unit_id)]);
         if ([...units].some(u => unpaidUnitIds.has(u))) unpaidUserIds.add(uid);
       }

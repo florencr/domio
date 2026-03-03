@@ -13,7 +13,8 @@ export function DashboardRouter() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login"); return; }
       const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
-      if (profile?.role === "manager") router.push("/dashboard/manager");
+      if (profile?.role === "admin") router.push("/dashboard/admin");
+      else if (profile?.role === "manager") router.push("/dashboard/manager");
       else if (profile?.role === "tenant") router.push("/dashboard/tenant");
       else router.push("/dashboard/owner");
     }

@@ -38,7 +38,7 @@ export default function LoginPage() {
     }
     const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
     const role = profile?.role;
-    const dashboard = role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+    const dashboard = role === "admin" ? "/dashboard/admin" : role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
     setLoading(false);
     window.location.href = dashboard;
   }

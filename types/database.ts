@@ -2,7 +2,7 @@
  * Domio HOA – database types (match Supabase schema)
  */
 
-export type AppRole = "manager" | "owner" | "tenant";
+export type AppRole = "admin" | "manager" | "owner" | "tenant";
 
 export type UnitType = "apartment" | "villa" | "parking" | "garden" | "patio";
 
@@ -27,10 +27,18 @@ export interface Profile {
   updated_at: string;
 }
 
-export interface Building {
+export interface Site {
   id: string;
   name: string;
   address: string;
+  manager_id: string;
+  created_at: string;
+}
+
+export interface Building {
+  id: string;
+  name: string;
+  site_id: string | null;
   created_at: string;
   updated_at: string;
 }

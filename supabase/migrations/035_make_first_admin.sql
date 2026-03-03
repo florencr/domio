@@ -1,0 +1,3 @@
+-- OPTIONAL: Promote a user to admin. Run in Supabase SQL Editor.
+-- Replace 'your@email.com' with the manager email you want to make admin.
+-- UPDATE profiles SET role = 'admin' WHERE email = 'your@email.com';

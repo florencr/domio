@@ -17,7 +17,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/compon
 
 // ─── Types ──────────────────────────────────────────────────────────────
 type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null; avatar_url?: string | null };
-type Building = { id: string; name: string; address: string; manager_id?: string | null };
+type Building = { id: string; name: string; site_id?: string | null };
+type Site = { id: string; name: string; address?: string };
 type Unit = { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance: string | null; floor: string | null };
 type Service = { id: string; name: string; unit_type: string; pricing_model: string; price_value: number; frequency: string; category?: string | null };
 type Expense = { id: string; title: string; category: string; vendor: string; amount: number; frequency: string; created_at?: string | null; paid_at?: string | null; period_month?: number | null; period_year?: number | null; template_id?: string | null; reference_code?: string | null };
@@ -30,6 +31,7 @@ type UnitTenantAssignment = { unit_id: string; tenant_id: string; is_payment_res
 
 type Data = {
   profile: Profile | null;
+  site: Site | null;
   buildings: Building[]; units: Unit[]; services: Service[];
   expenses: Expense[]; profiles: Profile[]; unitTypes: UnitType[];
   vendors: Vendor[]; serviceCategories: ServiceCategory[];
@@ -37,12 +39,20 @@ type Data = {
 };
 
 const EMPTY: Data = {
-  profile: null, buildings: [], units: [], services: [], expenses: [],
+  profile: null, site: null, buildings: [], units: [], services: [], expenses: [],
   profiles: [], unitTypes: [], vendors: [], serviceCategories: [],
   bills: [], unitOwners: [], unitTenantAssignments: [],
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+/** Bills/expenses can be edited/deleted only for current month or previous month. */
+function isPeriodEditable(periodMonth: number, periodYear: number): boolean {
+  const now = new Date();
+  const curM = now.getMonth() + 1, curY = now.getFullYear();
+  const prevM = curM === 1 ? 12 : curM - 1, prevY = curM === 1 ? curY - 1 : curY;
+  return (periodMonth === curM && periodYear === curY) || (periodMonth === prevM && periodYear === prevY);
+}
 
 function expenseRef(e: { title?: string; category?: string; period_month?: number | null; period_year?: number | null }) {
   const src = e.title || e.category || "EXP";
@@ -165,14 +175,15 @@ export default function ManagerPage() {
 
     const results = await Promise.all([
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url").eq("id", user.id).single(),
-      sb.from("buildings").select("id,name,address,manager_id"),
+      sb.from("sites").select("id,name,address").eq("manager_id", user.id).maybeSingle(),
+      sb.from("buildings").select("id,name,site_id"),
       sb.from("units").select("id,unit_name,type,size_m2,building_id,entrance,floor"),
-      sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category"),
-      sb.from("expenses").select("id,title,category,vendor,amount,frequency,created_at,paid_at,period_month,period_year,template_id"),
+      sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category,site_id"),
+      sb.from("expenses").select("id,title,category,vendor,amount,frequency,created_at,paid_at,period_month,period_year,template_id,site_id"),
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url"),
-      sb.from("unit_types").select("id,name"),
-      sb.from("vendors").select("id,name"),
-      sb.from("service_categories").select("id,name"),
+      sb.from("unit_types").select("id,name,site_id"),
+      sb.from("vendors").select("id,name,site_id"),
+      sb.from("service_categories").select("id,name,site_id"),
       sb.from("bills").select("id,unit_id,period_month,period_year,total_amount,status,paid_at,receipt_url,receipt_filename,receipt_path,reference_code").order("period_year",{ascending:false}).order("period_month",{ascending:false}).limit(200),
       sb.from("unit_owners").select("unit_id,owner_id"),
       sb.from("unit_tenant_assignments").select("unit_id,tenant_id,is_payment_responsible"),
@@ -181,19 +192,45 @@ export default function ManagerPage() {
     const profile = results[0].data as Profile | null;
     if (profile?.role !== "manager") { router.push("/dashboard"); return; }
 
+    const site = (results[1].data ?? null) as Site | null;
+    const siteId = site?.id ?? null;
+    const buildingsData = (results[2].data ?? []) as Building[];
+    const allUnits = (results[3].data ?? []) as Unit[];
+    const allServices = (results[4].data ?? []) as Service[];
+    const allExpenses = (results[5].data ?? []) as Expense[];
+    const allUnitTypes = (results[7].data ?? []) as UnitType[];
+    const allVendors = (results[8].data ?? []) as Vendor[];
+    const allServiceCategories = (results[9].data ?? []) as ServiceCategory[];
+
+    const buildings = siteId ? buildingsData.filter(b => b.site_id === siteId) : buildingsData;
+    const buildingIds = new Set(buildings.map(b => b.id));
+    const units = siteId ? allUnits.filter(u => buildingIds.has(u.building_id)) : allUnits;
+    const unitIds = new Set(units.map(u => u.id));
+    const unitOwnersFiltered = siteId ? (results[11].data ?? []).filter((uo: UnitOwner) => unitIds.has(uo.unit_id)) as UnitOwner[] : (results[11].data ?? []) as UnitOwner[];
+    const unitTenantAssignmentsFiltered = siteId ? (results[12].data ?? []).filter((a: UnitTenantAssignment) => unitIds.has(a.unit_id)) as UnitTenantAssignment[] : (results[12].data ?? []) as UnitTenantAssignment[];
+    const siteUserIds = new Set([...unitOwnersFiltered.map((uo: UnitOwner) => uo.owner_id), ...unitTenantAssignmentsFiltered.map((a: UnitTenantAssignment) => a.tenant_id)]);
+    const allProfiles = (results[6].data ?? []) as Profile[];
+    const profiles = siteId ? allProfiles.filter(p => siteUserIds.has(p.id)) : allProfiles;
+    const services = siteId ? allServices.filter((s: Service & { site_id?: string | null }) => !s.site_id || s.site_id === siteId) : allServices;
+    const expenses = siteId ? allExpenses.filter((e: Expense & { site_id?: string | null }) => !e.site_id || e.site_id === siteId) : allExpenses;
+    const unitTypes = siteId ? allUnitTypes.filter((ut: UnitType & { site_id?: string | null }) => !ut.site_id || ut.site_id === siteId) : allUnitTypes;
+    const vendors = siteId ? allVendors.filter((v: Vendor & { site_id?: string | null }) => !v.site_id || v.site_id === siteId) : allVendors;
+    const serviceCategories = siteId ? allServiceCategories.filter((c: ServiceCategory & { site_id?: string | null }) => !c.site_id || c.site_id === siteId) : allServiceCategories;
+
     setData({
       profile,
-      buildings: (results[1].data ?? []) as Building[],
-      units: (results[2].data ?? []) as Unit[],
-      services: (results[3].data ?? []) as Service[],
-      expenses: (results[4].data ?? []) as Expense[],
-      profiles: (results[5].data ?? []) as Profile[],
-      unitTypes: (results[6].data ?? []) as UnitType[],
-      vendors: (results[7].data ?? []) as Vendor[],
-      serviceCategories: (results[8].data ?? []) as ServiceCategory[],
-      bills: (results[9].data ?? []) as Bill[],
-      unitOwners: (results[10].data ?? []) as UnitOwner[],
-      unitTenantAssignments: (results[11].data ?? []) as UnitTenantAssignment[],
+      site,
+      buildings,
+      units,
+      services,
+      expenses,
+      profiles,
+      unitTypes,
+      vendors,
+      serviceCategories,
+      bills: siteId ? (results[10].data ?? []).filter((b: Bill) => unitIds.has(b.unit_id)) as Bill[] : (results[10].data ?? []) as Bill[],
+      unitOwners: unitOwnersFiltered,
+      unitTenantAssignments: unitTenantAssignmentsFiltered,
     });
     setLoading(false);
   }, [router]);
@@ -383,7 +420,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
               </Select>
             </div>
             <Button onClick={generate} disabled={generating}>{generating?"Generating...":"Generate bills"}</Button>
-            <Button variant="outline" onClick={async () => {
+            <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
               const sb = createClient();
               const m = parseInt(month), y = parseInt(year);
               const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
@@ -450,7 +487,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                       )}
                     </td>
                     <td className="py-3">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!isPeriodEditable(b.period_month, b.period_year)} onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
                         {b.paid_at ? "Mark unpaid" : "Mark paid"}
                       </Button>
                     </td>
@@ -521,12 +558,16 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   }
 
   async function markExpensePaid(id: string) {
-    await createClient().from("expenses").update({ paid_at: new Date().toISOString() }).eq("id", id);
-    reload();
+    const res = await fetch("/api/expenses", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expenseId: id, paid: true }) });
+    const r = await res.json();
+    if (r.success) reload();
+    else setMsg({ text: r.error || "Failed", ok: false });
   }
   async function markExpenseUnpaid(id: string) {
-    await createClient().from("expenses").update({ paid_at: null }).eq("id", id);
-    reload();
+    const res = await fetch("/api/expenses", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ expenseId: id, paid: false }) });
+    const r = await res.json();
+    if (r.success) reload();
+    else setMsg({ text: r.error || "Failed", ok: false });
   }
 
   const yrs = [new Date().getFullYear(), new Date().getFullYear() - 1];
@@ -559,7 +600,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
               </Select>
             </div>
             <Button onClick={generateRecurrent} disabled={generating}>{generating ? "Generating..." : "Generate recurrent"}</Button>
-            <Button variant="outline" onClick={async () => {
+            <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
               const sb = createClient();
               const m = parseInt(month), y = parseInt(year);
               const res = await sb.from("expenses").delete().eq("period_month", m).eq("period_year", y).select("*");
@@ -638,7 +679,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                       : <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
                   </td>
                   <td className="py-3">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => e.paid_at ? markExpenseUnpaid(e.id) : markExpensePaid(e.id)}>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!(e.period_month != null && e.period_year != null && isPeriodEditable(e.period_month, e.period_year))} onClick={() => e.paid_at ? markExpenseUnpaid(e.id) : markExpensePaid(e.id)}>
                       {e.paid_at ? "Mark unpaid" : "Mark paid"}
                     </Button>
                   </td>
@@ -812,7 +853,7 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
 
   return (
     <div className="flex flex-col w-full min-h-[calc(100vh-16rem)] md:min-h-[420px]">
-      <div className="flex-1 overflow-y-auto pb-24">
+      <div className="flex-1 overflow-y-auto">
         <div className="space-y-6 w-full">
           <div className="space-y-4 max-w-md">
           <div>
@@ -852,6 +893,10 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
             <Label htmlFor="unpaid-cfg" className="cursor-pointer">Only users with unpaid bills</Label>
           </div>
           {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+          <div className="flex gap-2 pt-2">
+            <Button variant="outline" onClick={onBack} className="flex-1 md:flex-none">Cancel</Button>
+            <Button onClick={send} disabled={sending} className="flex-1 md:flex-none">{sending ? "Sending..." : "Send"}</Button>
+          </div>
           </div>
           <Card className="w-full">
             <CardHeader className="pb-3">
@@ -892,10 +937,6 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
           </Card>
         </div>
       </div>
-      <div className="fixed bottom-0 left-0 right-0 md:relative md:mt-4 p-4 bg-background border-t md:border-t-0 flex gap-2 justify-end">
-        <Button variant="outline" onClick={onBack} className="flex-1 md:flex-none">Cancel</Button>
-        <Button onClick={send} disabled={sending} className="flex-1 md:flex-none">{sending ? "Sending..." : "Send"}</Button>
-      </div>
     </div>
   );
 }
@@ -927,13 +968,11 @@ function ConfigTab({ data, reload, configSubTab, setConfigSubTab }: { data: Data
 function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [showCreate, setShowCreate] = useState(false);
   const [newName, setNewName] = useState("");
-  const [newAddr, setNewAddr] = useState("");
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
   const [editingBuilding, setEditingBuilding] = useState<Building|null>(null);
-  const [editF, setEditF] = useState({name:"", address:"", manager_id:""});
+  const [editF, setEditF] = useState({name:""});
 
   const sb = createClient();
-  const profileMap = new Map(data.profiles.map(p => [p.id, p]));
 
   // Count units per building per type
   const unitCountMap = new Map<string, Map<string,number>>();
@@ -945,18 +984,15 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("buildings").insert({ name: newName, address: newAddr });
-    if (!error) { setMsg({text:"Building created.",ok:true}); setNewName(""); setNewAddr(""); setShowCreate(false); reload(); }
+    if (!data.site) { setMsg({text:"No site. Contact admin to create a site for you.",ok:false}); return; }
+    const { error } = await sb.from("buildings").insert({ name: newName, site_id: data.site.id });
+    if (!error) { setMsg({text:"Building created.",ok:true}); setNewName(""); setShowCreate(false); reload(); }
     else setMsg({text:error.message,ok:false});
   }
 
   async function saveEdit() {
     if (!editingBuilding) return;
-    const { error } = await sb.from("buildings").update({
-      name: editF.name,
-      address: editF.address,
-      manager_id: (editF.manager_id && editF.manager_id !== "none") ? editF.manager_id : null,
-    }).eq("id", editingBuilding.id);
+    const { error } = await sb.from("buildings").update({ name: editF.name }).eq("id", editingBuilding.id);
     if (!error) { setMsg({text:"Building updated.",ok:true}); setEditingBuilding(null); reload(); }
     else setMsg({text:error.message,ok:false});
   }
@@ -972,6 +1008,7 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
   return (
     <div className="space-y-4">
       {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-red-500"}`}>{msg.text}</p>}
+      {data.site?.address && <p className="text-sm text-muted-foreground">Site address: {data.site.address}</p>}
 
       <div className="flex items-center justify-between">
         <h3 className="text-sm font-semibold">Buildings ({data.buildings.length})</h3>
@@ -985,8 +1022,7 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
           <CardHeader className="pb-3"><CardTitle className="text-base">Add Building</CardTitle></CardHeader>
           <CardContent>
             <form onSubmit={create} className="flex gap-3 flex-wrap items-end">
-              <div><Label>Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Sofia Residence" required className="w-44"/></div>
-              <div className="flex-1 min-w-48"><Label>Address</Label><Input value={newAddr} onChange={e=>setNewAddr(e.target.value)} placeholder="Rruga Kodra e Derhemit..." required /></div>
+              <div><Label>Name</Label><Input value={newName} onChange={e=>setNewName(e.target.value)} placeholder="Building A" required className="w-44"/></div>
               <Button type="submit">Create</Button>
             </form>
           </CardContent>
@@ -1001,12 +1037,9 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
               <thead>
                 <tr className="border-b bg-muted/40">
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Building</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Address</th>
                   {data.unitTypes.map(t => (
                     <th key={t.id} className="px-3 py-3 text-center font-medium text-muted-foreground whitespace-nowrap">{t.name}</th>
                   ))}
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Manager</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Phone</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">Action</th>
                 </tr>
               </thead>
@@ -1014,7 +1047,6 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                 {data.buildings.map(b => {
                   const typeMap = unitCountMap.get(b.id);
                   const totalUnits = typeMap ? Array.from(typeMap.values()).reduce((s,n)=>s+n,0) : 0;
-                  const manager = b.manager_id ? profileMap.get(b.manager_id) : null;
                   const isActive = editingBuilding?.id === b.id;
                   return (
                     <tr key={b.id} className={`transition-colors ${isActive?"bg-blue-50":"hover:bg-muted/20"}`}>
@@ -1022,7 +1054,6 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                         <div className="font-medium">{b.name}</div>
                         <div className="text-xs text-muted-foreground">{totalUnits} unit{totalUnits!==1?"s":""} total</div>
                       </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs max-w-[180px]">{b.address}</td>
                       {data.unitTypes.map(t => (
                         <td key={t.id} className="px-3 py-3 text-center">
                           {typeMap?.get(t.name)
@@ -1031,14 +1062,8 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                         </td>
                       ))}
                       <td className="px-4 py-3">
-                        {manager
-                          ? <div className="flex items-center gap-2"><Avatar profile={manager} /><span className="text-sm">{manager.name} {manager.surname}</span></div>
-                          : <span className="text-xs text-amber-600 bg-amber-50 px-2 py-0.5 rounded">Not assigned</span>}
-                      </td>
-                      <td className="px-4 py-3 text-muted-foreground text-xs">{manager?.phone ?? <span className="text-muted-foreground/30">—</span>}</td>
-                      <td className="px-4 py-3">
                         <Button size="sm" variant={isActive?"default":"ghost"} className="h-7 px-3 text-xs"
-                          onClick={() => { if (isActive) setEditingBuilding(null); else { setEditingBuilding(b); setEditF({name:b.name, address:b.address, manager_id:b.manager_id??"none"}); setShowCreate(false); } }}>
+                          onClick={() => { if (isActive) setEditingBuilding(null); else { setEditingBuilding(b); setEditF({name:b.name}); setShowCreate(false); } }}>
                           {isActive ? "Close" : "Edit"}
                         </Button>
                       </td>
@@ -1046,7 +1071,7 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
                   );
                 })}
                 {!data.buildings.length && (
-                  <tr><td colSpan={4 + data.unitTypes.length} className="px-4 py-8 text-center text-muted-foreground">No buildings yet.</td></tr>
+                  <tr><td colSpan={2 + data.unitTypes.length} className="px-4 py-8 text-center text-muted-foreground">No buildings yet.</td></tr>
                 )}
               </tbody>
             </table>
@@ -1061,31 +1086,7 @@ function BuildingsCfg({ data, reload }: { data: Data; reload: () => void }) {
               <p className="text-xs text-muted-foreground">{editingBuilding.name}</p>
             </CardHeader>
             <CardContent className="space-y-4 pt-4">
-              <div className="space-y-2">
-                <div><Label className="text-xs">Building Name</Label><Input value={editF.name} onChange={e=>setEditF({...editF,name:e.target.value})} className="h-8 text-sm" /></div>
-                <div><Label className="text-xs">Address</Label><Input value={editF.address} onChange={e=>setEditF({...editF,address:e.target.value})} className="h-8 text-sm" /></div>
-              </div>
-
-              <div>
-                <Label className="text-xs">Assigned Manager</Label>
-                <Select value={editF.manager_id} onValueChange={v=>setEditF({...editF,manager_id:v})}>
-                  <SelectTrigger className="h-8 text-sm mt-1"><SelectValue placeholder="Select manager..." /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="none">— No manager —</SelectItem>
-                    {data.profiles.filter(p => p.role === "manager").map(p => (
-                      <SelectItem key={p.id} value={p.id}>
-                        <div className="flex items-center gap-2">
-                          <span>{p.name} {p.surname}</span>
-                          {p.phone && <span className="text-muted-foreground text-xs">· {p.phone}</span>}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {data.profiles.filter(p=>p.role==="manager").length === 0 && (
-                  <p className="text-xs text-amber-600 mt-1">No manager-role users found. Create a user with Manager role first.</p>
-                )}
-              </div>
+              <div><Label className="text-xs">Building Name</Label><Input value={editF.name} onChange={e=>setEditF({...editF,name:e.target.value})} className="h-8 text-sm mt-1" /></div>
 
               <div className="flex gap-2">
                 <Button size="sm" className="flex-1" onClick={saveEdit}>Save changes</Button>
@@ -2122,7 +2123,7 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
               <div><Label>Role</Label>
                 <Select value={f.role} onValueChange={v=>setF({...f,role:v})}>
                   <SelectTrigger><SelectValue/></SelectTrigger>
-                  <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem><SelectItem value="manager">Manager</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem></SelectContent>
                 </Select>
               </div>
               <div className="col-span-2 md:col-span-3 flex gap-2">
@@ -2213,7 +2214,7 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
                   <div><Label className="text-xs">Role</Label>
                     <Select value={editF.role} onValueChange={v=>setEditF({...editF,role:v})}>
                       <SelectTrigger className="h-8 text-sm"><SelectValue/></SelectTrigger>
-                      <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem><SelectItem value="manager">Manager</SelectItem></SelectContent>
+                      <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem></SelectContent>
                     </Select>
                   </div>
                 </div>
