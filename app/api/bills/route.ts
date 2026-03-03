@@ -16,12 +16,30 @@ function isPeriodEditable(periodMonth: number, periodYear: number): boolean {
   return (periodMonth === curM && periodYear === curY) || (periodMonth === prevM && periodYear === prevY);
 }
 
-// Mark bill paid or unpaid
+// Mark bill paid or unpaid. Also supports bulk: { ownerId, periodMonth, periodYear, paid }
 export async function PATCH(request: Request) {
   try {
-    const { billId, paid } = await request.json();
-    if (!billId) return NextResponse.json({ success: false, error: "Missing billId" }, { status: 400 });
+    const body = await request.json();
+    const { billId, paid, ownerId, periodMonth, periodYear } = body;
+
     const sb = adminClient();
+
+    if (ownerId != null && periodMonth != null && periodYear != null) {
+      // Bulk: mark all bills for owner+period
+      if (typeof paid !== "boolean") return NextResponse.json({ success: false, error: "paid required for bulk" }, { status: 400 });
+      if (!isPeriodEditable(Number(periodMonth), Number(periodYear))) {
+        return NextResponse.json({ success: false, error: "This billing period is locked." }, { status: 403 });
+      }
+      const { data: unitOwners } = await sb.from("unit_owners").select("unit_id").eq("owner_id", ownerId);
+      const unitIds = (unitOwners ?? []).map((u: { unit_id: string }) => u.unit_id);
+      if (!unitIds.length) return NextResponse.json({ success: false, error: "No units for owner" }, { status: 404 });
+      const update = paid ? { paid_at: new Date().toISOString(), status: "paid" } : { paid_at: null, status: "draft" };
+      const { error } = await sb.from("bills").update(update).in("unit_id", unitIds).eq("period_month", periodMonth).eq("period_year", periodYear);
+      if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
+      return NextResponse.json({ success: true });
+    }
+
+    if (!billId) return NextResponse.json({ success: false, error: "Missing billId" }, { status: 400 });
     const { data: bill, error: fetchErr } = await sb.from("bills").select("period_month,period_year").eq("id", billId).single();
     if (fetchErr || !bill) return NextResponse.json({ success: false, error: "Bill not found" }, { status: 404 });
     if (!isPeriodEditable(bill.period_month, bill.period_year)) {

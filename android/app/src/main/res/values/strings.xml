@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Domio</string>
+    <string name="title_activity_main">Domio</string>
+    <string name="package_name">com.domio.app</string>
+    <string name="custom_url_scheme">com.domio.app</string>
+</resources>

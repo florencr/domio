@@ -21,9 +21,10 @@ export type NotificationItem = {
 type NotificationBellProps = {
   isManager?: boolean;
   onSendClick?: () => void;
+  onSeeAllClick?: () => void;
 };
 
-export function NotificationBell({ isManager, onSendClick }: NotificationBellProps) {
+export function NotificationBell({ isManager, onSendClick, onSeeAllClick }: NotificationBellProps) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -85,18 +86,34 @@ export function NotificationBell({ isManager, onSendClick }: NotificationBellPro
         ) : notifications.length === 0 ? (
           <div className="px-3 py-6 text-sm text-muted-foreground text-center">No notifications</div>
         ) : (
-          notifications.map(n => (
-            <button
-              key={n.recipientId}
-              type="button"
-              className={`w-full text-left px-3 py-2 rounded-sm hover:bg-accent transition-colors ${!n.readAt ? "bg-blue-50 dark:bg-blue-950/30" : ""}`}
-              onClick={() => { if (!n.readAt) markRead(n.recipientId); }}
-            >
-              <p className="text-sm font-medium truncate">{n.title}</p>
-              {n.body && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>}
-              <p className="text-xs text-muted-foreground mt-1">{n.created_at ? new Date(n.created_at).toLocaleString() : ""}</p>
-            </button>
-          ))
+          <>
+            <div className="max-h-[280px] overflow-y-auto">
+              {notifications.slice(0, 4).map(n => (
+                <button
+                  key={n.id}
+                  type="button"
+                  className={`w-full text-left px-3 py-2 rounded-sm hover:bg-accent transition-colors ${!n.readAt ? "bg-blue-50 dark:bg-blue-950/30" : ""}`}
+                  onClick={() => { if (!n.readAt) markRead(n.recipientId); }}
+                >
+                  <p className="text-sm font-medium truncate">{n.title}</p>
+                  {n.body && <p className="text-xs text-muted-foreground line-clamp-2 mt-0.5">{n.body}</p>}
+                  <p className="text-xs text-muted-foreground mt-1">{n.created_at ? new Date(n.created_at).toLocaleString() : ""}</p>
+                </button>
+              ))}
+            </div>
+            {onSeeAllClick && (
+              <>
+                <div className="h-px bg-border mx-2" />
+                <button
+                  type="button"
+                  className="w-full px-3 py-2.5 text-sm font-medium text-blue-600 hover:bg-accent rounded-sm text-left"
+                  onClick={() => { setOpen(false); onSeeAllClick(); }}
+                >
+                  See all notifications
+                </button>
+              </>
+            )}
+          </>
         )}
       </DropdownMenuContent>
     </DropdownMenu>

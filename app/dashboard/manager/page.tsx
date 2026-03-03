@@ -13,7 +13,7 @@ import Link from "next/link";
 import { LogOut, Settings, User, FileText } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 // ─── Types ──────────────────────────────────────────────────────────────
 type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null; avatar_url?: string | null };
@@ -262,11 +262,12 @@ export default function ManagerPage() {
           </Link>
         </div>
         <div className="flex items-center gap-2">
-          <NotificationBell isManager onSendClick={() => { setTab("config"); setConfigSubTab("notifications"); setShowSendNotif(false); }} />
+          <NotificationBell isManager onSendClick={() => { setTab("config"); setConfigSubTab("notifications"); setShowSendNotif(false); }} onSeeAllClick={() => { setTab("config"); setConfigSubTab("notifications"); }} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <User className="size-5" />
+              <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
+                <User className="size-5 shrink-0" />
+                <span className="hidden md:inline truncate max-w-[140px]">{profile?.name} {profile?.surname}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -394,9 +395,27 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
     if (r.success) reload();
     else setMsg({ text: r.error || "Failed", ok: false });
   }
+  async function markAllPaid(ownerId: string, periodMonth: number, periodYear: number) {
+    const res = await fetch("/api/bills", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ownerId, periodMonth, periodYear, paid: true }) });
+    const r = await res.json();
+    if (r.success) reload();
+    else setMsg({ text: r.error || "Failed", ok: false });
+  }
+  async function markAllUnpaid(ownerId: string, periodMonth: number, periodYear: number) {
+    const res = await fetch("/api/bills", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ownerId, periodMonth, periodYear, paid: false }) });
+    const r = await res.json();
+    if (r.success) reload();
+    else setMsg({ text: r.error || "Failed", ok: false });
+  }
 
   const yrs = [new Date().getFullYear(), new Date().getFullYear() - 1];
   const sortedBills = [...data.bills].sort((a,b) => b.period_year - a.period_year || b.period_month - a.period_month);
+  const ownerPeriodCount = new Map<string, number>();
+  sortedBills.forEach(b => {
+    const ownerId = ownerMap.get(b.unit_id) ?? "_none";
+    const k = `${ownerId}-${b.period_month}-${b.period_year}`;
+    ownerPeriodCount.set(k, (ownerPeriodCount.get(k) ?? 0) + 1);
+  });
 
   return (
     <div className="space-y-4 mt-2">
@@ -487,9 +506,25 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                       )}
                     </td>
                     <td className="py-3">
-                      <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!isPeriodEditable(b.period_month, b.period_year)} onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
-                        {b.paid_at ? "Mark unpaid" : "Mark paid"}
-                      </Button>
+                      {(() => {
+                        const ownerId = ownerMap.get(b.unit_id);
+                        const k = ownerId ? `${ownerId}-${b.period_month}-${b.period_year}` : "";
+                        const count = ownerId ? ownerPeriodCount.get(k) ?? 1 : 1;
+                        const editable = isPeriodEditable(b.period_month, b.period_year);
+                        if (count > 1 && ownerId) {
+                          const allPaid = sortedBills.filter(x => ownerMap.get(x.unit_id) === ownerId && x.period_month === b.period_month && x.period_year === b.period_year).every(x => x.paid_at);
+                          return (
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!editable} onClick={() => allPaid ? markAllUnpaid(ownerId, b.period_month, b.period_year) : markAllPaid(ownerId, b.period_month, b.period_year)}>
+                              {allPaid ? `Mark all ${count} unpaid` : `Mark all ${count} paid`}
+                            </Button>
+                          );
+                        }
+                        return (
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!editable} onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
+                            {b.paid_at ? "Mark unpaid" : "Mark paid"}
+                          </Button>
+                        );
+                      })()}
                     </td>
                   </tr>
                 );

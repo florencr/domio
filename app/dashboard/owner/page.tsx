@@ -7,11 +7,11 @@ import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { LogOut, User, Camera, FileText, AlertTriangle } from "lucide-react";
+import { LogOut, User, Camera, FileText, AlertTriangle, Download } from "lucide-react";
 import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 type OwnerData = {
   profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
@@ -46,6 +46,8 @@ export default function OwnerPage() {
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  type UploadTarget = { billId?: string; periodMonth?: number; periodYear?: number; paymentResponsibleId?: string };
+  const uploadTargetRef = useRef<UploadTarget>({});
 
   const load = async () => {
     const sb = createClient();
@@ -105,18 +107,28 @@ export default function OwnerPage() {
     router.push("/");
   }
 
-  async function uploadSlip(billId: string, file: File) {
-    setUploadingFor(billId);
+  async function uploadSlip(target: UploadTarget, file: File) {
+    const key = target.billId ?? `${target.periodMonth}-${target.periodYear}`;
+    setUploadingFor(key);
     setUploadError(null);
     const sb = createClient();
     const ext = file.name.split(".").pop() || "jpg";
-    const path = `${billId}.${ext}`;
+    let userId = data.profile?.id;
+    if (!userId && target.periodMonth != null) {
+      const { data: { user } } = await sb.auth.getUser();
+      userId = user?.id ?? "x";
+    }
+    const payer = target.paymentResponsibleId ?? userId;
+    const path = target.periodMonth != null ? `payer-${payer}/${target.periodYear}-${String(target.periodMonth).padStart(2, "0")}.${ext}` : `${target.billId}.${ext}`;
     const { error: upErr } = await sb.storage.from("payment-slips").upload(path, file, { upsert: true });
     if (!upErr) {
+      const body = target.periodMonth != null
+        ? { periodMonth: target.periodMonth, periodYear: target.periodYear, paymentResponsibleId: target.paymentResponsibleId, receipt_path: path, receipt_filename: file.name }
+        : { billId: target.billId, receipt_path: path, receipt_filename: file.name };
       const res = await fetch("/api/receipt-record", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billId, receipt_path: path, receipt_filename: file.name }),
+        body: JSON.stringify(body),
       });
       if (res.ok) {
         load();
@@ -130,9 +142,9 @@ export default function OwnerPage() {
     setUploadingFor(null);
   }
 
-  const triggerFileInput = (billId: string) => {
+  const triggerFileInput = (target: UploadTarget) => {
     if (fileInputRef.current) {
-      (fileInputRef.current as HTMLInputElement & { _billId?: string })._billId = billId;
+      uploadTargetRef.current = target;
       fileInputRef.current.click();
     }
   };
@@ -188,18 +200,19 @@ export default function OwnerPage() {
   return (
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
       <input type="file" ref={fileInputRef} accept="image/*,.pdf" capture="environment" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; const bid = (fileInputRef.current as HTMLInputElement & { _billId?: string })?._billId; if (f && bid) uploadSlip(bid, f); e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; const t = uploadTargetRef.current; if (f && (t.billId || (t.periodMonth != null && t.periodYear != null))) uploadSlip(t, f); e.target.value = ""; }} />
       <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
         <Link href="/dashboard/owner" className="flex items-center">
           <DomioLogo className="h-9 w-auto" />
           <span className="ml-2 text-sm text-muted-foreground font-normal hidden sm:inline">Owner</span>
         </Link>
         <div className="flex items-center gap-2 md:gap-2">
-          <NotificationBell />
+          <NotificationBell onSeeAllClick={() => setTab("notifications")} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <User className="size-5" />
+              <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
+                <User className="size-5 shrink-0" />
+                <span className="hidden md:inline truncate max-w-[140px]">{profile?.name} {profile?.surname}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -209,12 +222,13 @@ export default function OwnerPage() {
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer">
+                <LogOut className="size-4" />
+                Logout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" onClick={handleSignOut} className="hidden md:inline-flex"><LogOut className="size-4 mr-1" /> Logout</Button>
-          <Button variant="ghost" size="icon" onClick={handleSignOut} className="md:hidden" title="Log out">
-            <LogOut className="size-5" />
-          </Button>
         </div>
       </header>
 
@@ -227,22 +241,22 @@ export default function OwnerPage() {
         </div>
       )}
 
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Collected</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-green-600">{collected.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {myBills.filter(b=>b.paid_at).length} paid bills</p></CardContent>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+        <Card className="border-l-4 border-l-green-500 py-3 gap-1 px-4">
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Collected</CardTitle></CardHeader>
+          <CardContent className="pb-2 pt-0 px-0"><p className="text-xl font-extrabold text-green-600">{collected.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>b.paid_at).length} paid bills</p></CardContent>
         </Card>
-        <Card className="border-l-4 border-l-red-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Outstanding</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-red-600">{outstanding.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {myBills.filter(b=>!b.paid_at).length} unpaid bills</p></CardContent>
+        <Card className="border-l-4 border-l-red-500 py-3 gap-1 px-4">
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Outstanding</CardTitle></CardHeader>
+          <CardContent className="pb-2 pt-0 px-0"><p className="text-xl font-extrabold text-red-600">{outstanding.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>!b.paid_at).length} unpaid bills</p></CardContent>
         </Card>
-        <Card className="border-l-4 border-l-orange-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Monthly Expenses</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-orange-600">{monthlyExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">{expenseRecords.length} expense records</p></CardContent>
+        <Card className="border-l-4 border-l-orange-500 py-3 gap-1 px-4">
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Monthly Expenses</CardTitle></CardHeader>
+          <CardContent className="pb-2 pt-0 px-0"><p className="text-xl font-extrabold text-orange-600">{monthlyExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">{expenseRecords.length} expense records</p></CardContent>
         </Card>
-        <Card className={`border-l-4 ${netFund >= 0 ? "border-l-blue-500" : "border-l-red-500"}`}>
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net Fund</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className={`text-2xl font-bold ${netFund >= 0 ? "text-blue-600" : "text-red-600"}`}>{netFund.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">Collected minus expenses</p></CardContent>
+        <Card className={`border-l-4 py-3 gap-1 px-4 ${netFund >= 0 ? "border-l-blue-500" : "border-l-amber-500"}`}>
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Net Fund</CardTitle></CardHeader>
+          <CardContent className="pb-2 pt-0 px-0"><p className={`text-xl font-extrabold ${netFund >= 0 ? "text-blue-600" : "text-amber-600"}`}>{netFund.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-0.5">Collected minus expenses</p></CardContent>
         </Card>
       </div>
 
@@ -255,12 +269,11 @@ export default function OwnerPage() {
             <TabsTrigger value="notifications">Notifications</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-2">
-          <TabsList className="grid w-full grid-cols-4">
-            <TabsTrigger value="units">My Units</TabsTrigger>
-            <TabsTrigger value="billing">Billing</TabsTrigger>
-            <TabsTrigger value="ledger">Ledger</TabsTrigger>
-            <TabsTrigger value="notifications">Notifications</TabsTrigger>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-background border-t p-3">
+          <TabsList className="grid w-full grid-cols-3 h-14 p-1">
+            <TabsTrigger value="units" className="py-3 text-sm font-semibold">My Units</TabsTrigger>
+            <TabsTrigger value="billing" className="py-3 text-sm font-semibold">Billing</TabsTrigger>
+            <TabsTrigger value="ledger" className="py-3 text-sm font-semibold">Ledger</TabsTrigger>
           </TabsList>
         </div>
         <div className="pb-20 md:pb-0">
@@ -322,40 +335,67 @@ export default function OwnerPage() {
             {!units.length && <div className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-800"><AlertTriangle className="h-4 w-4 shrink-0 text-amber-600" /><p className="text-sm">No units assigned to you. Ask the manager to assign you in <strong>Config → Units</strong> (Owner) or <strong>Config → Users</strong> (Unit assignments).</p></div>}
             {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
             <Card>
-              <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle></CardHeader>
+              <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle><p className="text-sm text-muted-foreground">One PDF and one slip per (period, payer). Actions apply to all bills in that group.</p></CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[500px]">
-                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Invoice</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
                   <tbody className="divide-y divide-border">
-                    {myBills.map(b => {
-                      const respId = unitResponsibleTenantMap.get(b.unit_id);
-                      const respTenant = respId ? tenantMap.get(respId) : null;
-                      return (
-                      <tr key={b.id} className="hover:bg-muted/30">
-                        <td className="py-3 pr-4 font-mono text-xs">{(b as {reference_code?: string}).reference_code ?? "—"}</td>
-                        <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
-                        <td className="py-3 pr-4">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
-                        <td className="py-3 pr-4 text-muted-foreground">{respTenant ? `${respTenant.name} ${respTenant.surname}` : "—"}</td>
-                        <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
-                        <td className="py-3 pr-4">
-                          {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
-                        </td>
-                        <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
-                        <td className="py-3">
-                          {(b.receipt_url || b.receipt_path) ? (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs text-muted-foreground truncate max-w-[140px]" title={b.receipt_filename ?? "Receipt"}>{b.receipt_filename ?? "Receipt"}</span>
-                              <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
-                            </div>
-                          ) : (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!uploadingFor} onClick={() => triggerFileInput(b.id)}>
-                              {uploadingFor === b.id ? "Uploading..." : <><Camera className="size-3 mr-1" /> Upload slip</>}
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ); })}
-                    {!myBills.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
+                    {(() => {
+                      const ownerId = profile?.id;
+                      const byPeriodAndPayer = new Map<string, typeof myBills>();
+                      myBills.forEach(b => {
+                        const payerId = unitResponsibleTenantMap.get(b.unit_id) ?? ownerId ?? "_owner";
+                        const k = `${b.period_year}-${String(b.period_month).padStart(2, "0")}-${payerId}`;
+                        const list = byPeriodAndPayer.get(k) ?? [];
+                        list.push(b);
+                        byPeriodAndPayer.set(k, list);
+                      });
+                      const sortedBills = [...myBills].sort((a, b) => b.period_year - a.period_year || b.period_month - a.period_month);
+                      const seenGroup = new Set<string>();
+                      return sortedBills.map(b => {
+                        const payerId = unitResponsibleTenantMap.get(b.unit_id) ?? ownerId ?? "_owner";
+                        const groupKey = `${b.period_year}-${String(b.period_month).padStart(2, "0")}-${payerId}`;
+                        const bills = byPeriodAndPayer.get(groupKey) ?? [];
+                        const isFirstInGroup = !seenGroup.has(groupKey);
+                        if (isFirstInGroup) seenGroup.add(groupKey);
+                        const billToName = payerId === ownerId || payerId === "_owner" ? "You" : (tenantMap.get(payerId) ? `${tenantMap.get(payerId)!.name} ${tenantMap.get(payerId)!.surname}` : "—");
+                        const anyReceipt = bills.some(x => x.receipt_url || x.receipt_path);
+                        const uploadKey = `${b.period_month}-${b.period_year}-${payerId}`;
+                        return (
+                          <tr key={b.id} className="hover:bg-muted/30">
+                            <td className="py-3 pr-4 font-mono text-xs">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                            <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month - 1]} {b.period_year}</td>
+                            <td className="py-3 pr-4 font-medium">{billToName}</td>
+                            <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
+                            <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
+                            <td className="py-3 pr-4">
+                              {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
+                            </td>
+                            <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
+                            <td className="py-3 pr-4">
+                              {isFirstInGroup ? (
+                                <a href={`/api/invoice?periodMonth=${b.period_month}&periodYear=${b.period_year}&paymentResponsibleId=${payerId}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><Download className="size-3" /> PDF</a>
+                              ) : "—"}
+                            </td>
+                            <td className="py-3">
+                              {isFirstInGroup ? (
+                                anyReceipt ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs text-muted-foreground">Slip uploaded</span>
+                                    <a href={`/api/receipt?billId=${bills[0].id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!uploadingFor} onClick={() => triggerFileInput({ periodMonth: b.period_month, periodYear: b.period_year, paymentResponsibleId: payerId })}>
+                                    {uploadingFor === uploadKey ? "Uploading..." : <><Camera className="size-3 mr-1" /> Upload slip</>}
+                                  </Button>
+                                )
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                    {!myBills.length && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
                   </tbody>
                 </table>
               </CardContent>

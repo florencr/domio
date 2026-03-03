@@ -10,7 +10,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { LogOut, User, Pencil } from "lucide-react";
 import { DomioLogo } from "@/components/DomioLogo";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 type Site = { id: string; name: string; address?: string; manager_id: string; created_at: string };
 type Profile = { id: string; name: string; surname: string; email: string; role: string };
@@ -118,7 +118,10 @@ export default function AdminPage() {
         <div className="flex gap-2">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon"><User className="size-5" /></Button>
+              <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
+                <User className="size-5 shrink-0" />
+                <span className="hidden md:inline truncate max-w-[140px]">{profile?.name} {profile?.surname}</span>
+              </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
               <div className="p-3">

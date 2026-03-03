@@ -7,10 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
-import { LogOut, User, Camera, FileText } from "lucide-react";
+import { LogOut, User, Camera, FileText, Download } from "lucide-react";
 import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 type TenantData = {
   profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
@@ -19,6 +19,7 @@ type TenantData = {
   buildings: { id: string; name: string }[];
   bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null }[];
   expenses: { id: string; title: string; vendor: string; amount: number; period_month: number | null; period_year: number | null }[];
+  unitTenantAssignments: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -36,13 +37,15 @@ function expenseRef(e: { title?: string; category?: string; period_month?: numbe
 
 export default function TenantPage() {
   const router = useRouter();
-  const [data, setData] = useState<TenantData>({ profile: null, units: [], allUnits: [], buildings: [], bills: [], expenses: [] });
+  const [data, setData] = useState<TenantData>({ profile: null, units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [] });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("billing");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  type UploadTarget = { billId?: string; periodMonth?: number; periodYear?: number };
+  const uploadTargetRef = useRef<UploadTarget>({});
 
   const load = async () => {
     const sb = createClient();
@@ -57,22 +60,30 @@ export default function TenantPage() {
     const unitIds = (tenantAssignmentsRes.data ?? []).map(u => u.unit_id);
     if (!unitIds.length) {
       const allUnits = (await sb.from("units").select("id, unit_name")).data ?? [];
-      setData({ profile, units: [], allUnits, buildings: [], bills: [], expenses: [] });
+      setData({ profile, units: [], allUnits, buildings: [], bills: [], expenses: [], unitTenantAssignments: [] });
       setLoading(false);
       return;
     }
 
     const unitIdSet = new Set(unitIds);
-    const [unitsRes, allUnitsRes, buildingsRes, billsRes, expensesRes] = await Promise.all([
+    const [unitsRes, allUnitsRes, buildingsRes, billsRes, expensesRes, assignmentsRes] = await Promise.all([
       sb.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
       sb.from("units").select("id, unit_name"),
       sb.from("buildings").select("id, name"),
       sb.rpc("get_my_bills", { lim: 200 }),
       sb.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
+      sb.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds),
     ]);
     const rawBills = (billsRes.data ?? []) as { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null }[];
-    const allBills = rawBills.filter(b => unitIdSet.has(b.unit_id));
-    setData({ profile, units: unitsRes.data ?? [], allUnits: allUnitsRes.data ?? [], buildings: buildingsRes.data ?? [], bills: allBills, expenses: expensesRes.data ?? [] });
+    const assignments = (assignmentsRes.data ?? []) as { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
+    const unitPayerMap = new Map<string, string>();
+    assignments.forEach(a => {
+      if (!unitPayerMap.has(a.unit_id) && a.is_payment_responsible !== false) unitPayerMap.set(a.unit_id, a.tenant_id);
+      else if (a.is_payment_responsible === true) unitPayerMap.set(a.unit_id, a.tenant_id);
+    });
+    const myPayingUnitIds = new Set(unitIds.filter((uid: string) => unitPayerMap.get(uid) === user.id));
+    const allBills = rawBills.filter(b => myPayingUnitIds.has(b.unit_id));
+    setData({ profile, units: unitsRes.data ?? [], allUnits: allUnitsRes.data ?? [], buildings: buildingsRes.data ?? [], bills: allBills, expenses: expensesRes.data ?? [], unitTenantAssignments: assignments });
     setLoading(false);
   };
 
@@ -90,36 +101,25 @@ export default function TenantPage() {
     router.push("/");
   }
 
-  async function uploadSlip(billId: string, file: File) {
-    setUploadingFor(billId);
+  async function uploadSlip(target: UploadTarget, file: File) {
+    const key = target.billId ?? `${target.periodMonth}-${target.periodYear}`;
+    setUploadingFor(key);
     setUploadError(null);
     const sb = createClient();
     const ext = file.name.split(".").pop() || "jpg";
-    const path = `${billId}.${ext}`;
+    const path = target.periodMonth != null ? `payer-${data.profile?.id ?? "x"}/${target.periodYear}-${String(target.periodMonth).padStart(2, "0")}.${ext}` : `${target.billId}.${ext}`;
     const { error: upErr } = await sb.storage.from("payment-slips").upload(path, file, { upsert: true });
     if (!upErr) {
-      const res = await fetch("/api/receipt-record", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ billId, receipt_path: path, receipt_filename: file.name }),
-      });
-      if (res.ok) {
-        load();
-      } else {
-        const err = await res.json().catch(() => ({}));
-        setUploadError(err.error || "Could not record slip.");
-      }
-    } else {
-      setUploadError(upErr.message || "Upload failed.");
-    }
+      const body = target.periodMonth != null ? { periodMonth: target.periodMonth, periodYear: target.periodYear, receipt_path: path, receipt_filename: file.name } : { billId: target.billId, receipt_path: path, receipt_filename: file.name };
+      const res = await fetch("/api/receipt-record", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      if (res.ok) load();
+      else { const err = await res.json().catch(() => ({})); setUploadError(err.error || "Could not record slip."); }
+    } else setUploadError(upErr.message || "Upload failed.");
     setUploadingFor(null);
   }
 
-  const triggerFileInput = (billId: string) => {
-    if (fileInputRef.current) {
-      (fileInputRef.current as HTMLInputElement & { _billId?: string })._billId = billId;
-      fileInputRef.current.click();
-    }
+  const triggerFileInput = (target: UploadTarget) => {
+    if (fileInputRef.current) { uploadTargetRef.current = target; fileInputRef.current.click(); }
   };
 
   if (loading) return (
@@ -150,18 +150,19 @@ export default function TenantPage() {
   return (
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
       <input type="file" ref={fileInputRef} accept="image/*,.pdf" capture="environment" className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; const bid = (fileInputRef.current as HTMLInputElement & { _billId?: string })?._billId; if (f && bid) uploadSlip(bid, f); e.target.value = ""; }} />
+        onChange={(e) => { const f = e.target.files?.[0]; const t = uploadTargetRef.current; if (f && (t.billId || (t.periodMonth != null && t.periodYear != null))) uploadSlip(t, f); e.target.value = ""; }} />
       <header className="flex items-center justify-between mb-6">
         <Link href="/dashboard/tenant" className="flex items-center">
           <DomioLogo className="h-9 w-auto" />
           <span className="ml-2 text-sm text-muted-foreground font-normal hidden sm:inline">Tenant</span>
         </Link>
         <div className="flex items-center gap-2">
-          <NotificationBell />
+          <NotificationBell onSeeAllClick={() => setTab("notifications")} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon">
-                <User className="size-5" />
+              <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
+                <User className="size-5 shrink-0" />
+                <span className="hidden md:inline truncate max-w-[140px]">{profile?.name} {profile?.surname}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
@@ -230,36 +231,60 @@ export default function TenantPage() {
           <div className="space-y-4 mt-2">
             {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
             <Card>
-              <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle></CardHeader>
+              <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle><p className="text-sm text-muted-foreground">One PDF and one slip per period. Actions apply to all bills in that period.</p></CardHeader>
               <CardContent className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[500px]">
-                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Invoice</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
                   <tbody className="divide-y divide-border">
-                    {myBills.map(b => (
-                      <tr key={b.id} className="hover:bg-muted/30">
-                        <td className="py-3 pr-4 font-mono text-xs">{(b as {reference_code?: string}).reference_code ?? "—"}</td>
-                        <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
-                        <td className="py-3 pr-4">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
-                        <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
-                        <td className="py-3 pr-4">
-                          {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
-                        </td>
-                        <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
-                        <td className="py-3">
-                          {(b.receipt_url || b.receipt_path) ? (
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-xs text-muted-foreground truncate max-w-[140px]" title={b.receipt_filename ?? "Receipt"}>{b.receipt_filename ?? "Receipt"}</span>
-                              <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
-                            </div>
-                          ) : (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!uploadingFor} onClick={() => triggerFileInput(b.id)}>
-                              {uploadingFor === b.id ? "Uploading..." : <><Camera className="size-3 mr-1" /> Upload slip</>}
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                    {!myBills.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
+                    {(() => {
+                      const byPeriod = new Map<string, typeof myBills>();
+                      myBills.forEach(b => {
+                        const k = `${b.period_year}-${String(b.period_month).padStart(2, "0")}`;
+                        const list = byPeriod.get(k) ?? []; list.push(b); byPeriod.set(k, list);
+                      });
+                      const sortedBills = [...myBills].sort((a, b) => b.period_year - a.period_year || b.period_month - a.period_month);
+                      const seenPeriod = new Set<string>();
+                      return sortedBills.map(b => {
+                        const periodKey = `${b.period_year}-${String(b.period_month).padStart(2, "0")}`;
+                        const bills = byPeriod.get(periodKey) ?? [];
+                        const isFirstInPeriod = !seenPeriod.has(periodKey);
+                        if (isFirstInPeriod) seenPeriod.add(periodKey);
+                        const anyReceipt = bills.some(x => x.receipt_url || x.receipt_path);
+                        const uploadKey = periodKey;
+                        return (
+                          <tr key={b.id} className="hover:bg-muted/30">
+                            <td className="py-3 pr-4 font-mono text-xs">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                            <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month - 1]} {b.period_year}</td>
+                            <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
+                            <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
+                            <td className="py-3 pr-4">
+                              {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
+                            </td>
+                            <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
+                            <td className="py-3 pr-4">
+                              {isFirstInPeriod ? (
+                                <a href={`/api/invoice?periodMonth=${b.period_month}&periodYear=${b.period_year}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><Download className="size-3" /> PDF</a>
+                              ) : "—"}
+                            </td>
+                            <td className="py-3">
+                              {isFirstInPeriod ? (
+                                anyReceipt ? (
+                                  <div className="flex flex-col gap-0.5">
+                                    <span className="text-xs text-muted-foreground">Slip uploaded</span>
+                                    <a href={`/api/receipt?billId=${bills[0].id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
+                                  </div>
+                                ) : (
+                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!uploadingFor} onClick={() => triggerFileInput({ periodMonth: b.period_month, periodYear: b.period_year })}>
+                                    {uploadingFor === uploadKey ? "Uploading..." : <><Camera className="size-3 mr-1" /> Upload slip</>}
+                                  </Button>
+                                )
+                              ) : "—"}
+                            </td>
+                          </tr>
+                        );
+                      });
+                    })()}
+                    {!myBills.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
                   </tbody>
                 </table>
               </CardContent>
