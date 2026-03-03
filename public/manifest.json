@@ -1,0 +1,15 @@
+{
+  "name": "Domio",
+  "short_name": "Domio",
+  "description": "Condo Management (HOA)",
+  "start_url": "/",
+  "display": "standalone",
+  "icons": [
+    {
+      "src": "/domio-icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

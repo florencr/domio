@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import Image from "next/image";
 import {
   Card,
   CardContent,
@@ -14,7 +15,6 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { DomioLogo } from "@/components/DomioLogo";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -62,7 +62,9 @@ export default function SignUpPage() {
   return (
     <Card className="w-full max-w-sm">
       <CardHeader>
-        <CardTitle className="flex justify-center"><DomioLogo className="h-9 w-auto" /></CardTitle>
+        <CardTitle className="flex justify-center">
+          <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
+        </CardTitle>
         <CardDescription>Create your account</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>

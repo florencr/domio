@@ -1,6 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { createClient as createServerClient } from "@/lib/supabase/server";
 import { NextResponse } from "next/server";
+import { getFcmMessaging } from "@/lib/firebase-admin";
 
 function adminClient() {
   return createClient(
@@ -98,6 +99,22 @@ export async function POST(request: Request) {
     if (recipientRows.length > 0) {
       const { error: recErr } = await admin.from("notification_recipients").insert(recipientRows);
       if (recErr) return NextResponse.json({ error: recErr.message }, { status: 500 });
+    }
+
+    // Send push notifications to registered devices (requires FIREBASE_SERVICE_ACCOUNT_JSON)
+    const fcm = getFcmMessaging();
+    if (fcm && userIds.size > 0) {
+      const { data: tokens } = await admin.from("device_tokens").select("token").in("user_id", [...userIds]);
+      if (tokens && tokens.length > 0) {
+        const sendPromises = (tokens as { token: string }[]).map(({ token }) =>
+          fcm.send({
+            token,
+            notification: { title, body: msgBody ?? undefined },
+            data: { notificationId: notif.id },
+          }).catch(() => null)
+        );
+        await Promise.allSettled(sendPromises);
+      }
     }
 
     return NextResponse.json({ success: true, recipients: recipientRows.length });

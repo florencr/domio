@@ -4,12 +4,15 @@ import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { SortableTh, sortBy } from "@/components/ui/sortable-th";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
-import { LogOut, User, Camera, FileText, Download } from "lucide-react";
+import { LogOut, User, Camera, FileText, Download, Home, BookOpen, Bell, SlidersHorizontal, AlertTriangle } from "lucide-react";
 import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Label } from "@/components/ui/label";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 type TenantData = {
@@ -43,6 +46,21 @@ export default function TenantPage() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [unitsSortCol, setUnitsSortCol] = useState<string | null>(null);
+  const [unitsSortDir, setUnitsSortDir] = useState<"asc" | "desc">("asc");
+  const [billsSortCol, setBillsSortCol] = useState<string | null>(null);
+  const [billsSortDir, setBillsSortDir] = useState<"asc" | "desc">("asc");
+  const [ledgerSortCol, setLedgerSortCol] = useState<string | null>(null);
+  const [ledgerSortDir, setLedgerSortDir] = useState<"asc" | "desc">("asc");
+  const [filterPeriod, setFilterPeriod] = useState("all");
+  const [filterUnitType, setFilterUnitType] = useState("all");
+  const [filterUnitId, setFilterUnitId] = useState("all");
+  const [filterPaymentStatus, setFilterPaymentStatus] = useState("all");
+  const [filterLedgerPeriod, setFilterLedgerPeriod] = useState("all");
+  const [filterLedgerType, setFilterLedgerType] = useState("all");
+  const [filterLedgerStatus, setFilterLedgerStatus] = useState("all");
+  const [showBillingFilters, setShowBillingFilters] = useState(false);
+  const [showLedgerFilters, setShowLedgerFilters] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   type UploadTarget = { billId?: string; periodMonth?: number; periodYear?: number };
   const uploadTargetRef = useRef<UploadTarget>({});
@@ -143,18 +161,54 @@ export default function TenantPage() {
   const ledgerRows: LedgerRow[] = [
     ...myBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)?.unit_name ?? "—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: (b as {reference_code?: string}).reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
     ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: (e as {reference_code?: string}).reference_code ?? expenseRef(e), amount: Number(e.amount), status: "Recurrent" })),
-  ].sort((a,b) => b.date.localeCompare(a.date));
+  ];
+  const getUnitValue = (u: { id: string; unit_name: string; building_id: string; type: string; size_m2: number | null }, col: string): string | number => {
+    switch (col) { case "unit": return u.unit_name; case "building": return buildingMap.get(u.building_id) ?? ""; case "type": return u.type; case "size": return u.size_m2 ?? 0; default: return ""; }
+  };
+  const sortedUnits = unitsSortCol ? sortBy(units, unitsSortCol, unitsSortDir, getUnitValue) : units;
+  const handleUnitsSort = (col: string) => { setUnitsSortDir(prev => unitsSortCol === col && prev === "asc" ? "desc" : "asc"); setUnitsSortCol(col); };
+  const getTenantBillValue = (b: typeof myBills[0], col: string): string | number => {
+    switch (col) {
+      case "ref": return ((b as { reference_code?: string }).reference_code ?? "") as string;
+      case "period": return b.period_year * 100 + b.period_month;
+      case "unit": return (unitMap.get(b.unit_id)?.unit_name ?? "") as string;
+      case "amount": return Math.abs(Number(b.total_amount));
+      case "status": return (b.paid_at ? "Paid" : b.status) as string;
+      case "paidOn": return b.paid_at ? new Date(b.paid_at).getTime() : 0;
+      default: return "";
+    }
+  };
+  let filteredBills = myBills;
+  if (filterPeriod !== "all") { const [y, m] = filterPeriod.split("-").map(Number); filteredBills = filteredBills.filter(b => b.period_year === y && b.period_month === m); }
+  if (filterUnitType !== "all") { const unitIdsByType = new Set(units.filter(u => u.type === filterUnitType).map(u => u.id)); filteredBills = filteredBills.filter(b => unitIdsByType.has(b.unit_id)); }
+  if (filterUnitId !== "all") filteredBills = filteredBills.filter(b => b.unit_id === filterUnitId);
+  if (filterPaymentStatus !== "all") {
+    if (filterPaymentStatus === "paid") filteredBills = filteredBills.filter(b => b.paid_at);
+    else if (filterPaymentStatus === "unpaid") filteredBills = filteredBills.filter(b => !b.paid_at && b.status !== "in_process");
+    else if (filterPaymentStatus === "in_process") filteredBills = filteredBills.filter(b => b.status === "in_process");
+  }
+  const sortedBillsForDisplay = billsSortCol ? sortBy(filteredBills, billsSortCol, billsSortDir, getTenantBillValue) : [...filteredBills].sort((a, b) => b.period_year - a.period_year || b.period_month - a.period_month);
+  const handleBillsSort = (col: string) => { setBillsSortDir(prev => billsSortCol === col && prev === "asc" ? "desc" : "asc"); setBillsSortCol(col); };
+  const getLedgerValue = (r: LedgerRow & { balance?: number }, col: string): string | number => {
+    switch (col) { case "ref": return r.ref; case "date": return r.date; case "type": return r.type; case "label": return r.label; case "status": return r.status; case "amount": return r.amount; case "balance": return r.balance ?? 0; default: return ""; }
+  };
+  let filteredLedgerRows = ledgerRows;
+  if (filterLedgerPeriod !== "all") { const [y, m] = filterLedgerPeriod.split("-").map(Number); const prefix = `${y}-${String(m).padStart(2, "0")}`; filteredLedgerRows = filteredLedgerRows.filter(r => r.date.startsWith(prefix)); }
+  if (filterLedgerType !== "all") filteredLedgerRows = filteredLedgerRows.filter(r => r.type === filterLedgerType);
+  if (filterLedgerStatus !== "all") filteredLedgerRows = filteredLedgerRows.filter(r => r.status === filterLedgerStatus);
+  const sortedLedgerRows = ledgerSortCol ? sortBy(filteredLedgerRows, ledgerSortCol, ledgerSortDir, getLedgerValue) : [...filteredLedgerRows].sort((a,b) => b.date.localeCompare(a.date));
   let running = 0;
-  const rowsWithBalance = [...ledgerRows].reverse().map(r => { running += r.type === "income" ? r.amount : -r.amount; return {...r, balance: running}; }).reverse();
+  const rowsWithBalance = [...sortedLedgerRows].reverse().map(r => { running += r.type === "income" ? r.amount : -r.amount; return {...r, balance: running}; }).reverse();
+  const handleLedgerSort = (col: string) => { setLedgerSortDir(prev => ledgerSortCol === col && prev === "asc" ? "desc" : "asc"); setLedgerSortCol(col); };
 
   return (
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
       <input type="file" ref={fileInputRef} accept="image/*,.pdf" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; const t = uploadTargetRef.current; if (f && (t.billId || (t.periodMonth != null && t.periodYear != null))) uploadSlip(t, f); e.target.value = ""; }} />
-      <header className="flex items-center justify-between mb-6">
-        <Link href="/dashboard/tenant" className="flex items-center">
-          <DomioLogo className="h-9 w-auto" />
-          <span className="ml-2 text-sm text-muted-foreground font-normal hidden sm:inline">Tenant</span>
+      <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
+        <Link href="/dashboard/tenant" className="flex items-center gap-2">
+          <DomioLogo className="h-9 w-auto shrink-0" />
+          <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Tenant Dashboard</span>
         </Link>
         <div className="flex items-center gap-2">
           <NotificationBell onSeeAllClick={() => setTab("notifications")} />
@@ -172,47 +226,87 @@ export default function TenantPage() {
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer">
+                <LogOut className="size-4" />
+                Logout
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="outline" size="sm" onClick={handleSignOut}><LogOut className="size-4 mr-1" /> Logout</Button>
         </div>
       </header>
 
-      <div className="grid gap-4 md:grid-cols-4 mb-6">
-        <Card className="border-l-4 border-l-green-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Collected</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-green-600">{collected.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {myBills.filter(b=>b.paid_at).length} paid bills</p></CardContent>
+      {myBills.filter(b => !b.paid_at).length > 0 && (
+        <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
+          <p className="text-sm">
+            You have <strong>{myBills.filter(b => !b.paid_at).length} unpaid bill{myBills.filter(b => !b.paid_at).length > 1 ? "s" : ""}</strong> ({outstanding.toFixed(2)} total). Please pay or upload your payment slip in the Billing tab.
+          </p>
+        </div>
+      )}
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
+        <Card className="border-l-4 border-l-green-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-green-600 shrink-0">{collected.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Collected</p>
+            <p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>b.paid_at).length} paid bills</p>
+          </div>
         </Card>
-        <Card className="border-l-4 border-l-red-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Outstanding</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-red-600">{outstanding.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">From {myBills.filter(b=>!b.paid_at).length} unpaid bills</p></CardContent>
+        <Card className="border-l-4 border-l-red-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-red-600 shrink-0">{outstanding.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Outstanding</p>
+            <p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>!b.paid_at).length} unpaid bills</p>
+          </div>
         </Card>
-        <Card className="border-l-4 border-l-orange-500">
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Monthly Expenses</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className="text-2xl font-bold text-orange-600">{monthlyExpenses.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">{expenseRecords.length} expense records</p></CardContent>
+        <Card className="border-l-4 border-l-orange-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
+          <p className="text-xl font-extrabold text-orange-600 shrink-0">{monthlyExpenses.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Monthly Expenses</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{expenseRecords.length} expense records</p>
+          </div>
         </Card>
-        <Card className={`border-l-4 ${netFund >= 0 ? "border-l-blue-500" : "border-l-red-500"}`}>
-          <CardHeader className="pb-1 pt-4"><CardTitle className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Net Fund</CardTitle></CardHeader>
-          <CardContent className="pb-4"><p className={`text-2xl font-bold ${netFund >= 0 ? "text-blue-600" : "text-red-600"}`}>{netFund.toFixed(2)}</p><p className="text-xs text-muted-foreground mt-1">Collected minus expenses</p></CardContent>
+        <Card className={`border-l-4 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start ${netFund >= 0 ? "border-l-blue-500" : "border-l-amber-500"}`}>
+          <p className={`text-xl font-extrabold shrink-0 ${netFund >= 0 ? "text-blue-600" : "text-amber-600"}`}>{netFund.toFixed(2)}</p>
+          <div className="text-right md:text-left">
+            <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Net Fund</p>
+            <p className="text-xs text-muted-foreground mt-0.5">Collected minus expenses</p>
+          </div>
         </Card>
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList className="grid w-full grid-cols-4 max-w-2xl mb-2">
-          <TabsTrigger value="units">My Units</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="ledger">Ledger</TabsTrigger>
-          <TabsTrigger value="notifications">Notifications</TabsTrigger>
-        </TabsList>
-
+        <div className="hidden md:block mb-2">
+          <TabsList className="grid w-full grid-cols-4 max-w-2xl">
+            <TabsTrigger value="units" className="flex items-center gap-2"><Home className="size-4" />My Units</TabsTrigger>
+            <TabsTrigger value="billing" className="flex items-center gap-2"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="ledger" className="flex items-center gap-2"><BookOpen className="size-4" />Ledger</TabsTrigger>
+            <TabsTrigger value="notifications" className="flex items-center gap-2"><Bell className="size-4" />Notifications</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-4">
+          <TabsList className="grid w-full grid-cols-3 h-12 min-h-[48px] p-1.5 rounded-lg">
+            <TabsTrigger value="units" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Home className="size-4" />My Units</TabsTrigger>
+            <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
+            <TabsTrigger value="ledger" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><BookOpen className="size-4" />Ledger</TabsTrigger>
+          </TabsList>
+        </div>
+        <div className="pb-24 md:pb-0">
         <TabsContent value="units">
-          <Card className="mt-2">
+          <div className="space-y-4 mt-2">
+          <Card>
             <CardHeader><CardTitle>My Units ({units.length})</CardTitle></CardHeader>
             <CardContent className="overflow-x-auto">
               <table className="w-full text-sm min-w-[400px]">
-                <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Building</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 font-medium text-muted-foreground text-center">m²</th></tr></thead>
+                <thead><tr className="border-b text-left">
+                  <SortableTh column="unit" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
+                  <SortableTh column="building" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Building</SortableTh>
+                  <SortableTh column="type" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
+                  <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 font-medium text-muted-foreground text-center">m²</SortableTh>
+                </tr></thead>
                 <tbody className="divide-y divide-border">
-                  {units.map(u => (
+                  {sortedUnits.map(u => (
                     <tr key={u.id} className="hover:bg-muted/30">
                       <td className="py-3 pr-4 font-medium">{u.unit_name}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{buildingMap.get(u.building_id) ?? "—"}</td>
@@ -225,26 +319,76 @@ export default function TenantPage() {
               </table>
             </CardContent>
           </Card>
+          </div>
         </TabsContent>
 
         <TabsContent value="billing">
           <div className="space-y-4 mt-2">
             {uploadError && <p className="text-sm text-red-600">{uploadError}</p>}
             <Card>
-              <CardHeader><CardTitle>My Bills ({myBills.length})</CardTitle><p className="text-sm text-muted-foreground">One PDF and one slip per period. Actions apply to all bills in that period.</p></CardHeader>
-              <CardContent className="overflow-x-auto">
+              <CardHeader className="flex flex-row items-start justify-between gap-4">
+                <div>
+                  <CardTitle>My Bills ({myBills.length}{sortedBillsForDisplay.length !== myBills.length ? ` — showing ${sortedBillsForDisplay.length}` : ""})</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">One PDF and one slip per period. Actions apply to all bills in that period.</p>
+                </div>
+                <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowBillingFilters(v => !v)} aria-label="Toggle filters">
+                  <SlidersHorizontal className="size-4" />
+                </Button>
+              </CardHeader>
+              <CardContent className="space-y-3">
+                <div className={`grid transition-[grid-template-rows] duration-200 ${showBillingFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+                  <div className="min-h-0 overflow-hidden">
+                    <div className="flex flex-wrap gap-2 items-end pb-3">
+                      <div><Label className="text-xs">Period</Label>
+                        <Select value={filterPeriod} onValueChange={setFilterPeriod}>
+                          <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="all">All periods</SelectItem>
+                            {[...new Set(myBills.map(b => `${b.period_year}-${b.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem> })}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div><Label className="text-xs">Unit type</Label>
+                        <Select value={filterUnitType} onValueChange={setFilterUnitType}>
+                          <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="all">All types</SelectItem>{[...new Set(units.map(u=>u.type))].map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><Label className="text-xs">Unit</Label>
+                        <Select value={filterUnitId} onValueChange={setFilterUnitId}>
+                          <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+                        </Select>
+                      </div>
+                      <div><Label className="text-xs">Status</Label>
+                        <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
+                          <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                          <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem><SelectItem value="in_process">In process</SelectItem></SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[500px]">
-                  <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Unit</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Invoice</th><th className="pb-3 font-medium text-muted-foreground">Action</th></tr></thead>
+                  <thead><tr className="border-b text-left">
+                    <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+                    <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+                    <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
+                    <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">Amount</SortableTh>
+                    <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
+                    <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</SortableTh>
+                    <th className="pb-3 pr-4 font-medium text-muted-foreground">Invoice</th>
+                    <th className="pb-3 font-medium text-muted-foreground">Action</th>
+                  </tr></thead>
                   <tbody className="divide-y divide-border">
                     {(() => {
                       const byPeriod = new Map<string, typeof myBills>();
-                      myBills.forEach(b => {
+                      filteredBills.forEach(b => {
                         const k = `${b.period_year}-${String(b.period_month).padStart(2, "0")}`;
                         const list = byPeriod.get(k) ?? []; list.push(b); byPeriod.set(k, list);
                       });
-                      const sortedBills = [...myBills].sort((a, b) => b.period_year - a.period_year || b.period_month - a.period_month);
                       const seenPeriod = new Set<string>();
-                      return sortedBills.map(b => {
+                      return sortedBillsForDisplay.map(b => {
                         const periodKey = `${b.period_year}-${String(b.period_month).padStart(2, "0")}`;
                         const bills = byPeriod.get(periodKey) ?? [];
                         const isFirstInPeriod = !seenPeriod.has(periodKey);
@@ -284,9 +428,10 @@ export default function TenantPage() {
                         );
                       });
                     })()}
-                    {!myBills.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">No bills yet.</td></tr>}
+                    {(myBills.length === 0 || sortedBillsForDisplay.length === 0) && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">{myBills.length === 0 ? "No bills yet." : "No bills match filters."}</td></tr>}
                   </tbody>
                 </table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -294,10 +439,50 @@ export default function TenantPage() {
 
         <TabsContent value="ledger">
           <Card className="mt-2">
-            <CardHeader><CardTitle>Full Ledger ({ledgerRows.length} entries)</CardTitle></CardHeader>
-            <CardContent className="overflow-x-auto">
+            <CardHeader className="flex flex-row items-start justify-between gap-4">
+              <CardTitle>Full Ledger ({ledgerRows.length}{filteredLedgerRows.length !== ledgerRows.length ? ` — showing ${filteredLedgerRows.length}` : ""} entries)</CardTitle>
+              <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowLedgerFilters(v => !v)} aria-label="Toggle filters">
+                <SlidersHorizontal className="size-4" />
+              </Button>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className={`grid transition-[grid-template-rows] duration-200 ${showLedgerFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
+                <div className="min-h-0 overflow-hidden">
+                  <div className="flex flex-wrap gap-2 items-end pb-3">
+                    <div><Label className="text-xs">Period</Label>
+                      <Select value={filterLedgerPeriod} onValueChange={setFilterLedgerPeriod}>
+                        <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">All periods</SelectItem>
+                          {[...new Set(ledgerRows.map(r => r.date.slice(0,7)))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem> })}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div><Label className="text-xs">Type</Label>
+                      <Select value={filterLedgerType} onValueChange={setFilterLedgerType}>
+                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                    <div><Label className="text-xs">Status</Label>
+                      <Select value={filterLedgerStatus} onValueChange={setFilterLedgerStatus}>
+                        <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                        <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Unpaid">Unpaid</SelectItem><SelectItem value="In process">In process</SelectItem><SelectItem value="Recurrent">Recurrent</SelectItem></SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[600px]">
-                <thead><tr className="border-b text-left"><th className="pb-3 pr-4 font-medium text-muted-foreground">Reference</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Period</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th><th className="pb-3 pr-4 font-medium text-muted-foreground">Status</th><th className="pb-3 pr-4 font-medium text-muted-foreground text-right">Amount</th><th className="pb-3 font-medium text-muted-foreground text-right">Running Balance</th></tr></thead>
+                <thead><tr className="border-b text-left">
+                  <SortableTh column="ref" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
+                  <SortableTh column="date" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
+                  <SortableTh column="type" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
+                  <SortableTh column="label" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Description</SortableTh>
+                  <SortableTh column="status" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
+                  <SortableTh column="amount" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">Amount</SortableTh>
+                  <SortableTh column="balance" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground text-right" align="right">Running Balance</SortableTh>
+                </tr></thead>
                 <tbody className="divide-y divide-border">
                   {rowsWithBalance.map(r => (
                     <tr key={r.key} className="hover:bg-muted/30">
@@ -312,9 +497,10 @@ export default function TenantPage() {
                       <td className={`py-3 text-right font-mono text-sm ${r.balance>=0?"text-blue-600":"text-red-600"}`}>{r.balance.toFixed(2)}</td>
                     </tr>
                   ))}
-                  {!ledgerRows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">No transactions yet.</td></tr>}
+                  {(ledgerRows.length === 0 || rowsWithBalance.length === 0) && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{ledgerRows.length === 0 ? "No transactions yet." : "No transactions match filters."}</td></tr>}
                 </tbody>
               </table>
+              </div>
             </CardContent>
           </Card>
         </TabsContent>
@@ -342,6 +528,7 @@ export default function TenantPage() {
             </CardContent>
           </Card>
         </TabsContent>
+        </div>
       </Tabs>
     </div>
   );

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -264,6 +264,7 @@ export default function ManagerPage() {
         </div>
         <div className="flex items-center gap-2">
           <NotificationBell isManager onSendClick={() => { setTab("config"); setConfigSubTab("notifications"); setShowSendNotif(false); }} onSeeAllClick={() => { setTab("config"); setConfigSubTab("notifications"); }} />
+          <Button variant="ghost" size="icon" onClick={() => setTab("config")} title="Configuration"><Settings className="size-5" /></Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
@@ -285,7 +286,6 @@ export default function ManagerPage() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button variant="ghost" size="icon" onClick={() => setTab("config")} title="Configuration"><Settings className="size-5" /></Button>
         </div>
       </header>
 
@@ -330,7 +330,7 @@ export default function ManagerPage() {
             <TabsTrigger value="config" className="flex items-center gap-2"><Settings className="size-4" />Config</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-3 pb-4">
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-4">
           <TabsList className="grid w-full grid-cols-4 h-12 min-h-[48px] p-1.5 rounded-lg">
             <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
             <TabsTrigger value="expenses" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Wallet className="size-4" />Expenses</TabsTrigger>
@@ -363,6 +363,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [showGenerateBills, setShowGenerateBills] = useState(false);
 
   const unitMap = new Map(data.units.map(u => [u.id, u]));
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
@@ -490,41 +491,48 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   return (
     <div className="space-y-4 mt-2">
       <Card>
-        <CardHeader>
-          <CardTitle>Generate Monthly Bills</CardTitle>
-          <p className="text-sm text-muted-foreground">Bills include only per-unit services (e.g. maintenance, parking fees). Expenses are tracked separately.</p>
+        <CardHeader className="cursor-pointer select-none" onClick={() => setShowGenerateBills(v => !v)}>
+          <div className="flex flex-row items-center justify-between gap-2">
+            <CardTitle className="text-base">Billing actions</CardTitle>
+            {showGenerateBills ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+          </div>
+          <p className="text-sm text-muted-foreground">Generate monthly bills or delete for a period. Expand to access.</p>
         </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-3 items-end flex-wrap">
-            <div><Label>Month</Label>
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
-              </Select>
+        {showGenerateBills && (
+          <CardContent className="space-y-3 pt-0 border-t">
+            <p className="text-sm font-medium mt-3">Generate Monthly Bills</p>
+            <p className="text-sm text-muted-foreground">Bills include only per-unit services (e.g. maintenance, parking fees). Expenses are tracked separately.</p>
+            <div className="flex gap-3 items-end flex-wrap">
+              <div><Label>Month</Label>
+                <Select value={month} onValueChange={setMonth}>
+                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div><Label>Year</Label>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectContent>{yrs.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <Button onClick={generate} disabled={generating}>{generating?"Generating...":"Generate bills"}</Button>
+              <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
+                const sb = createClient();
+                const m = parseInt(month), y = parseInt(year);
+                const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
+                const n = res.data?.length ?? 0;
+                setMsg({text:`✓ Deleted ${n} bill(s) for ${MONTHS[m-1]} ${y}. You can regenerate now.`,ok:true});
+                reload();
+              }}>Delete all for period</Button>
             </div>
-            <div><Label>Year</Label>
-              <Select value={year} onValueChange={setYear}>
-                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>{yrs.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-              </Select>
+            {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
+            <div className="text-xs text-muted-foreground border rounded p-2 bg-muted/30">
+              <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
+              <strong>Shared expenses/month:</strong> {data.expenses.filter(e=>e.frequency==="recurrent").reduce((s,e)=>s+Number(e.amount),0).toFixed(2)} &nbsp;|&nbsp;
+              <strong>Units to bill:</strong> {data.units.length}
             </div>
-            <Button onClick={generate} disabled={generating}>{generating?"Generating...":"Generate bills"}</Button>
-            <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
-              const sb = createClient();
-              const m = parseInt(month), y = parseInt(year);
-              const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
-              const n = res.data?.length ?? 0;
-              setMsg({text:`✓ Deleted ${n} bill(s) for ${MONTHS[m-1]} ${y}. You can regenerate now.`,ok:true});
-              reload();
-            }}>Delete all for period</Button>
-          </div>
-          {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
-          <div className="text-xs text-muted-foreground border rounded p-2 bg-muted/30">
-            <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
-            <strong>Shared expenses/month:</strong> {data.expenses.filter(e=>e.frequency==="recurrent").reduce((s,e)=>s+Number(e.amount),0).toFixed(2)} &nbsp;|&nbsp;
-            <strong>Units to bill:</strong> {data.units.length}
-          </div>
-        </CardContent>
+          </CardContent>
+        )}
       </Card>
 
       <Card>
