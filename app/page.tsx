@@ -82,15 +82,15 @@ export default function HomePage() {
           </div>
         ) : (
           <Card className="w-full">
-            <CardHeader>
-              <CardTitle className="flex flex-col items-center gap-1">
+            <CardHeader className="pb-2">
+              <div className="flex flex-col items-center gap-1.5 mb-6">
                 <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
-                <span className="text-muted-foreground text-sm font-normal">Condo Management (HOA)</span>
-              </CardTitle>
-              <CardDescription>Sign in to your account</CardDescription>
+                <span className="font-bold text-foreground">Condo Management (HOA)</span>
+              </div>
+              <CardDescription className="text-center -mt-4 mb-1">Sign in to your account</CardDescription>
             </CardHeader>
             <form onSubmit={handleLogin}>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-4 pt-0">
                 {loginError && (
                   <p className="text-sm text-destructive" role="alert">{loginError}</p>
                 )}

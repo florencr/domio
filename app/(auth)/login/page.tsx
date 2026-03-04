@@ -45,14 +45,15 @@ export default function LoginPage() {
 
   return (
     <Card className="w-full max-w-sm">
-      <CardHeader>
-        <CardTitle className="flex justify-center">
+      <CardHeader className="pb-2">
+        <div className="flex flex-col items-center gap-1.5 mb-6">
           <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
-        </CardTitle>
-        <CardDescription>Sign in to your account</CardDescription>
+          <span className="font-bold text-foreground">Condo Management (HOA)</span>
+        </div>
+        <CardDescription className="text-center -mt-4 mb-1">Sign in to your account</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit}>
-        <CardContent className="space-y-4">
+        <CardContent className="space-y-4 pt-0">
           {error && (
             <p className="text-sm text-destructive" role="alert">
               {error}

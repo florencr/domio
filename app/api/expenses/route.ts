@@ -9,24 +9,14 @@ function adminClient() {
   );
 }
 
-function isPeriodEditable(periodMonth: number, periodYear: number): boolean {
-  const now = new Date();
-  const curM = now.getMonth() + 1, curY = now.getFullYear();
-  const prevM = curM === 1 ? 12 : curM - 1, prevY = curM === 1 ? curY - 1 : curY;
-  return (periodMonth === curM && periodYear === curY) || (periodMonth === prevM && periodYear === prevY);
-}
-
-// Mark expense paid or unpaid
+// Mark expense paid or unpaid (paid_at can change anytime)
 export async function PATCH(request: Request) {
   try {
     const { expenseId, paid } = await request.json();
     if (!expenseId) return NextResponse.json({ success: false, error: "Missing expenseId" }, { status: 400 });
     const sb = adminClient();
-    const { data: expense, error: fetchErr } = await sb.from("expenses").select("period_month,period_year").eq("id", expenseId).single();
+    const { data: expense, error: fetchErr } = await sb.from("expenses").select("id").eq("id", expenseId).single();
     if (fetchErr || !expense) return NextResponse.json({ success: false, error: "Expense not found" }, { status: 404 });
-    if (expense.period_month != null && expense.period_year != null && !isPeriodEditable(expense.period_month, expense.period_year)) {
-      return NextResponse.json({ success: false, error: "This expense period is locked. Only current month and previous month can be edited." }, { status: 403 });
-    }
     const update = paid ? { paid_at: new Date().toISOString() } : { paid_at: null };
     const { error } = await sb.from("expenses").update(update).eq("id", expenseId);
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });

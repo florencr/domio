@@ -28,10 +28,16 @@ export async function GET(
     const { admin, siteId } = r;
     const { id } = await context.params;
 
-    const { data: doc, error } = await admin.from("documents").select("id,path,building_id").eq("id", id).single();
+    const { data: doc, error } = await admin.from("documents").select("id,path,building_id,expense_id").eq("id", id).single();
     if (error || !doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const { data: building } = await admin.from("buildings").select("site_id").eq("id", (doc as { building_id: string }).building_id).single();
-    if (!building || (building as { site_id: string }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    const d = doc as { building_id: string | null; expense_id: string | null };
+    if (d.expense_id) {
+      const { data: expense } = await admin.from("expenses").select("site_id").eq("id", d.expense_id).single();
+      if (!expense || (expense as { site_id: string | null }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    } else if (d.building_id) {
+      const { data: building } = await admin.from("buildings").select("site_id").eq("id", d.building_id).single();
+      if (!building || (building as { site_id: string }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    } else return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     const { data: urlData } = await admin.storage.from("documents").createSignedUrl((doc as { path: string }).path, 3600);
     if (!urlData?.signedUrl) return NextResponse.json({ error: "Failed to generate URL" }, { status: 500 });
@@ -51,10 +57,16 @@ export async function DELETE(
     const { admin, siteId } = r;
     const { id } = await context.params;
 
-    const { data: doc, error: fetchErr } = await admin.from("documents").select("path,building_id").eq("id", id).single();
+    const { data: doc, error: fetchErr } = await admin.from("documents").select("path,building_id,expense_id").eq("id", id).single();
     if (fetchErr || !doc) return NextResponse.json({ error: "Not found" }, { status: 404 });
-    const { data: building } = await admin.from("buildings").select("site_id").eq("id", (doc as { building_id: string }).building_id).single();
-    if (!building || (building as { site_id: string }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    const d = doc as { building_id: string | null; expense_id: string | null };
+    if (d.expense_id) {
+      const { data: expense } = await admin.from("expenses").select("site_id").eq("id", d.expense_id).single();
+      if (!expense || (expense as { site_id: string | null }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    } else if (d.building_id) {
+      const { data: building } = await admin.from("buildings").select("site_id").eq("id", d.building_id).single();
+      if (!building || (building as { site_id: string }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
+    } else return NextResponse.json({ error: "Not found" }, { status: 404 });
 
     await admin.storage.from("documents").remove([(doc as { path: string }).path]);
     await admin.from("documents").delete().eq("id", id);

@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import Link from "next/link";
-import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal, ChevronDown, ChevronUp } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, X } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -47,7 +47,13 @@ const EMPTY: Data = {
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-/** Bills/expenses can be edited/deleted only for current month or previous month. */
+/** Bill generation can be deleted only for current month. */
+function isPeriodCurrent(periodMonth: number, periodYear: number): boolean {
+  const now = new Date();
+  return periodMonth === now.getMonth() + 1 && periodYear === now.getFullYear();
+}
+
+/** Period editable for generate (current or previous month). */
 function isPeriodEditable(periodMonth: number, periodYear: number): boolean {
   const now = new Date();
   const curM = now.getMonth() + 1, curY = now.getFullYear();
@@ -491,58 +497,49 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   return (
     <div className="space-y-4 mt-2">
       <Card>
-        <CardHeader className="cursor-pointer select-none" onClick={() => setShowGenerateBills(v => !v)}>
-          <div className="flex flex-row items-center justify-between gap-2">
-            <CardTitle className="text-base">Billing actions</CardTitle>
-            {showGenerateBills ? <ChevronUp className="size-4 text-muted-foreground" /> : <ChevronDown className="size-4 text-muted-foreground" />}
+        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+          <CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button size="sm" className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => setShowGenerateBills(v => !v)}>
+              {showGenerateBills ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+              Generate bills
+            </Button>
+            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+              <SlidersHorizontal className="size-4" />
+            </Button>
           </div>
-          <p className="text-sm text-muted-foreground">Generate monthly bills or delete for a period. Expand to access.</p>
         </CardHeader>
-        {showGenerateBills && (
-          <CardContent className="space-y-3 pt-0 border-t">
-            <p className="text-sm font-medium mt-3">Generate Monthly Bills</p>
-            <p className="text-sm text-muted-foreground">Bills include only per-unit services (e.g. maintenance, parking fees). Expenses are tracked separately.</p>
-            <div className="flex gap-3 items-end flex-wrap">
-              <div><Label>Month</Label>
+        <CardContent className="space-y-3 pt-0">
+          {showGenerateBills && (
+            <div className="rounded-md border-l-4 border-emerald-400 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 space-y-2">
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Generate monthly bills (per-unit services). Expenses are tracked separately.</p>
+              <div className="flex flex-wrap gap-2 items-center">
                 <Select value={month} onValueChange={setMonth}>
-                  <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
                 </Select>
-              </div>
-              <div><Label>Year</Label>
                 <Select value={year} onValueChange={setYear}>
-                  <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
+                  <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
                   <SelectContent>{yrs.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                 </Select>
+                <Button size="sm" className="h-8" onClick={generate} disabled={generating}>{generating ? "..." : "Generate"}</Button>
+                <Button variant="outline" size="sm" className="h-8" disabled={!isPeriodCurrent(parseInt(month), parseInt(year))} onClick={async () => {
+                  const sb = createClient();
+                  const m = parseInt(month), y = parseInt(year);
+                  const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
+                  const n = res.data?.length ?? 0;
+                  setMsg({text:`✓ Deleted ${n} bill(s).`,ok:true});
+                  reload();
+                }}>Delete period</Button>
               </div>
-              <Button onClick={generate} disabled={generating}>{generating?"Generating...":"Generate bills"}</Button>
-              <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
-                const sb = createClient();
-                const m = parseInt(month), y = parseInt(year);
-                const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
-                const n = res.data?.length ?? 0;
-                setMsg({text:`✓ Deleted ${n} bill(s) for ${MONTHS[m-1]} ${y}. You can regenerate now.`,ok:true});
-                reload();
-              }}>Delete all for period</Button>
+              <div className="text-xs text-muted-foreground">
+                <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
+                <strong>Shared expenses/month:</strong> {data.expenses.filter(e=>e.frequency==="recurrent").reduce((s,e)=>s+Number(e.amount),0).toFixed(2)} &nbsp;|&nbsp;
+                <strong>Units to bill:</strong> {data.units.length}
+              </div>
+              {msg.text && <p className={`text-xs ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
             </div>
-            {msg.text && <p className={`text-sm ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
-            <div className="text-xs text-muted-foreground border rounded p-2 bg-muted/30">
-              <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
-              <strong>Shared expenses/month:</strong> {data.expenses.filter(e=>e.frequency==="recurrent").reduce((s,e)=>s+Number(e.amount),0).toFixed(2)} &nbsp;|&nbsp;
-              <strong>Units to bill:</strong> {data.units.length}
-            </div>
-          </CardContent>
-        )}
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
-            <SlidersHorizontal className="size-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          )}
           <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
             <div className="min-h-0 overflow-hidden">
               <div className="flex flex-wrap gap-2 items-end pb-3">
@@ -626,17 +623,16 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                         const ownerId = ownerMap.get(b.unit_id);
                         const k = ownerId ? `${ownerId}-${b.period_month}-${b.period_year}` : "";
                         const count = ownerId ? ownerPeriodCount.get(k) ?? 1 : 1;
-                        const editable = isPeriodEditable(b.period_month, b.period_year);
                         if (count > 1 && ownerId) {
                           const allPaid = sortedBills.filter(x => ownerMap.get(x.unit_id) === ownerId && x.period_month === b.period_month && x.period_year === b.period_year).every(x => x.paid_at);
                           return (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!editable} onClick={() => allPaid ? markAllUnpaid(ownerId, b.period_month, b.period_year) : markAllPaid(ownerId, b.period_month, b.period_year)}>
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => allPaid ? markAllUnpaid(ownerId, b.period_month, b.period_year) : markAllPaid(ownerId, b.period_month, b.period_year)}>
                               {allPaid ? `Mark all ${count} unpaid` : `Mark all ${count} paid`}
                             </Button>
                           );
                         }
                         return (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!editable} onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
+                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
                             {b.paid_at ? "Mark unpaid" : "Mark paid"}
                           </Button>
                         );
@@ -645,13 +641,88 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                   </tr>
                 );
               })}
-              {!sortedBills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Generate bills above."}</td></tr>}
+              {!sortedBills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Use Generate bills to create."}</td></tr>}
             </tbody>
           </table>
           </div>
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+// ─── Expense Documents Panel (contracts, invoices per expense) ───────────
+function ExpenseDocsPanel({ expense, onClose, onReload }: { expense: Expense; onClose: () => void; onReload?: () => void }) {
+  const [docs, setDocs] = useState<{ id: string; name: string; category: string; created_at: string }[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [uploading, setUploading] = useState(false);
+  const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
+
+  const loadDocs = useCallback(() => {
+    fetch(`/api/documents?expenseId=${expense.id}`).then(r => r.ok ? r.json() : { documents: [] }).then(j => { setDocs(j.documents ?? []); setLoading(false); });
+  }, [expense.id]);
+
+  useEffect(() => { setLoading(true); loadDocs(); }, [loadDocs]);
+
+  async function upload(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const form = e.currentTarget;
+    const fileInput = form.querySelector('input[type="file"]') as HTMLInputElement;
+    const file = fileInput?.files?.[0];
+    const cat = (form.querySelector('select[name="category"]') as HTMLSelectElement)?.value || "invoice";
+    if (!file) { setMsg({ text: "Select a file", ok: false }); return; }
+    setUploading(true); setMsg({ text: "", ok: true });
+    const fd = new FormData();
+    fd.append("file", file);
+    fd.append("expenseId", expense.id);
+    fd.append("category", cat);
+    const res = await fetch("/api/documents", { method: "POST", body: fd });
+    setUploading(false);
+    if (res.ok) { setMsg({ text: "Uploaded.", ok: true }); fileInput.value = ""; loadDocs(); onReload?.(); }
+    else { const j = await res.json().catch(() => ({})); setMsg({ text: j.error || "Upload failed", ok: false }); }
+  }
+
+  async function remove(id: string) {
+    const res = await fetch(`/api/documents/${id}`, { method: "DELETE" });
+    if (res.ok) { loadDocs(); onReload?.(); } else { setMsg({ text: "Delete failed", ok: false }); }
+  }
+
+  async function download(id: string) {
+    const res = await fetch(`/api/documents/${id}`);
+    const j = await res.json().catch(() => ({}));
+    if (j.url) window.open(j.url, "_blank");
+  }
+
+  return (
+    <Card className="border-amber-200 bg-amber-50/50 dark:bg-amber-950/20 dark:border-amber-900">
+      <CardHeader className="pb-2 flex flex-row items-center justify-between gap-2">
+        <div>
+          <CardTitle className="text-base flex items-center gap-2">
+            <Paperclip className="size-4" /> Documents: {expense.title} · {expense.vendor}
+          </CardTitle>
+          <p className="text-xs text-muted-foreground mt-0.5">Contracts, invoices (e.g. plumber, electrician)</p>
+        </div>
+        <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onClose} aria-label="Close"><X className="size-4" /></Button>
+      </CardHeader>
+      <CardContent className="space-y-3 pt-0">
+        {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>}
+        <form onSubmit={upload} className="flex flex-wrap gap-2 items-end p-3 border rounded-lg bg-background">
+          <div><Label>File</Label><Input type="file" name="file" className="mt-1" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" /></div>
+          <div><Label>Type</Label><select name="category" className="flex h-9 rounded-md border px-3 mt-1 text-sm"><option value="invoice">Invoice</option><option value="contract">Contract</option><option value="maintenance">Maintenance</option><option value="other">Other</option></select></div>
+          <Button type="submit" size="sm" disabled={uploading}>{uploading ? "Uploading..." : "Upload"}</Button>
+        </form>
+        <div className="space-y-2">
+          {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+          {!loading && docs.map(d => (
+            <div key={d.id} className="flex items-center justify-between py-2 px-3 rounded border bg-muted/30 text-sm">
+              <div><span className="font-medium">{d.name}</span><span className="text-muted-foreground ml-2">({d.category})</span><span className="text-muted-foreground ml-2 text-xs">{new Date(d.created_at).toLocaleDateString()}</span></div>
+              <div className="flex gap-1"><Button variant="outline" size="sm" onClick={() => download(d.id)}>Download</Button><Button variant="ghost" size="sm" onClick={() => remove(d.id)} className="text-red-600">Delete</Button></div>
+            </div>
+          ))}
+          {!loading && !docs.length && <p className="text-sm text-muted-foreground">No documents. Upload invoice or contract above.</p>}
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -672,6 +743,8 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   const [filterVendor, setFilterVendor] = useState<string>("all");
   const [filterType, setFilterType] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
+  const [expenseDocsFor, setExpenseDocsFor] = useState<Expense | null>(null);
+  const [showGenerateExpenses, setShowGenerateExpenses] = useState(false);
 
   const recurrentTemplates = expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
   const allExpenseRecords = expenses.filter(e => e.period_month != null);
@@ -756,91 +829,95 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
 
   return (
     <div className="space-y-4 mt-2">
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-        <Card><CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Monthly Recurrent (templates)</CardTitle></CardHeader><CardContent className="pb-4"><p className="text-xl font-bold">{monthlyTotal.toFixed(2)}</p><p className="text-xs text-muted-foreground">{recurrentTemplates.length} items</p></CardContent></Card>
-        <Card><CardHeader className="pb-1 pt-4"><CardTitle className="text-xs text-muted-foreground uppercase tracking-wide">Ad-hoc</CardTitle></CardHeader><CardContent className="pb-4"><p className="text-xl font-bold">{adhocTotal.toFixed(2)}</p><p className="text-xs text-muted-foreground">{adhocAny.length} items</p></CardContent></Card>
+      <div className="grid grid-cols-2 gap-2 w-full">
+        <Card className="py-2 px-4 gap-1 w-full">
+          <CardHeader className="pb-0 pt-2 px-0">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Monthly Recurrent (templates)</CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2 pt-0 px-0">
+            <p className="text-lg font-extrabold">{monthlyTotal.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{recurrentTemplates.length} items</p>
+          </CardContent>
+        </Card>
+        <Card className="py-2 px-4 gap-1 w-full">
+          <CardHeader className="pb-0 pt-2 px-0">
+            <CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Ad-hoc</CardTitle>
+          </CardHeader>
+          <CardContent className="pb-2 pt-0 px-0">
+            <p className="text-lg font-extrabold">{adhocTotal.toFixed(2)}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{adhocAny.length} items</p>
+          </CardContent>
+        </Card>
       </div>
 
+      {expenseDocsFor && (
+        <ExpenseDocsPanel expense={expenseDocsFor} onClose={() => setExpenseDocsFor(null)} onReload={reload} />
+      )}
       <Card>
-        <CardHeader>
-          <CardTitle>Generate Recurrent Expenses</CardTitle>
-          <p className="text-sm text-muted-foreground">Create period-specific records from your recurrent templates (in Config). Then generate bills in the Billing tab.</p>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="flex gap-3 items-end flex-wrap">
-            <div><Label>Month</Label>
-              <Select value={month} onValueChange={setMonth}>
-                <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <div><Label>Year</Label>
-              <Select value={year} onValueChange={setYear}>
-                <SelectTrigger className="w-24"><SelectValue /></SelectTrigger>
-                <SelectContent>{yrs.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
-              </Select>
-            </div>
-            <Button onClick={generateRecurrent} disabled={generating}>{generating ? "Generating..." : "Generate recurrent"}</Button>
-            <Button variant="outline" disabled={!isPeriodEditable(parseInt(month), parseInt(year))} onClick={async () => {
-              const sb = createClient();
-              const m = parseInt(month), y = parseInt(year);
-              const res = await sb.from("expenses").delete().eq("period_month", m).eq("period_year", y).select("*");
-              const n = res.data?.length ?? 0;
-              setMsg({ text: `✓ Deleted ${n} expense(s) for ${MONTHS[m - 1]} ${y}.`, ok: true });
-              reload();
-            }}>Delete all for period</Button>
+        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
+          <CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle>
+          <div className="flex items-center gap-2 shrink-0">
+            <Button variant="outline" size="sm" className="h-8 gap-1 bg-muted/50 hover:bg-muted border-gray-300" onClick={() => { setShowGenerateExpenses(v => !v); setShowAdd(false); }}>
+              {showGenerateExpenses ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
+              Generate recurrent
+            </Button>
+            <Button size="sm" className="h-8 bg-teal-500 hover:bg-teal-600 text-white border-0" onClick={() => { setShowAdd(v => !v); setShowGenerateExpenses(false); }}>
+              + Record expense
+            </Button>
+            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+              <SlidersHorizontal className="size-4" />
+            </Button>
           </div>
-          {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-amber-600"}`}>{msg.text}</p>}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Record Ad-hoc Expense</CardTitle>
-          <p className="text-sm text-muted-foreground">Add a one-off expense whenever it happens.</p>
         </CardHeader>
-        <CardContent>
-          {!showAdd ? (
-            <Button variant="outline" onClick={() => setShowAdd(true)}>+ Record new ad-hoc expense</Button>
-          ) : (
-            <div className="space-y-3 max-w-md">
-              <div><Label>Title</Label><Input value={addF.title} onChange={e=>setAddF({...addF,title:e.target.value})} placeholder="e.g. Plumbing repair" /></div>
-              <div><Label>Category</Label>
-                <Select value={addF.category||"none"} onValueChange={v=>setAddF({...addF,category:v==="none"?"":v})}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">— None —</SelectItem>{serviceCategories.map(c=><SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+        <CardContent className="space-y-3 pt-0">
+          {showGenerateExpenses && (
+            <div className="rounded-md border-l-4 border-amber-400 bg-amber-50/60 dark:bg-amber-950/20 p-3 space-y-2">
+              <p className="text-xs font-medium text-amber-800 dark:text-amber-200">Generate recurrent expenses</p>
+              <div className="flex flex-wrap gap-2 items-center">
+                <Select value={month} onValueChange={setMonth}>
+                  <SelectTrigger className="w-28 h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>{MONTHS.map((m, i) => <SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent>
                 </Select>
-              </div>
-              <div><Label>Vendor</Label>
-                <Select value={addF.vendor||"none"} onValueChange={v=>setAddF({...addF,vendor:v==="none"?"":v})}>
-                  <SelectTrigger><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent><SelectItem value="none">— None —</SelectItem>{vendors.map(v=><SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>)}</SelectContent>
+                <Select value={year} onValueChange={setYear}>
+                  <SelectTrigger className="w-20 h-8"><SelectValue /></SelectTrigger>
+                  <SelectContent>{yrs.map(y => <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent>
                 </Select>
+                <Button size="sm" className="h-8" onClick={generateRecurrent} disabled={generating}>{generating ? "..." : "Generate"}</Button>
+                <Button variant="outline" size="sm" className="h-8" disabled={expenses.some(e => e.period_month === parseInt(month) && e.period_year === parseInt(year) && e.paid_at)} onClick={async () => {
+                  const sb = createClient();
+                  const m = parseInt(month), y = parseInt(year);
+                  const res = await sb.from("expenses").delete().eq("period_month", m).eq("period_year", y).select("*");
+                  const n = res.data?.length ?? 0;
+                  setMsg({ text: `✓ Deleted ${n} expense(s).`, ok: true });
+                  reload();
+                }}>Delete period</Button>
               </div>
-              <div><Label>Amount</Label><Input type="number" step="0.01" value={addF.amount} onChange={e=>setAddF({...addF,amount:e.target.value})} placeholder="0.00" /></div>
-              <div><Label>Period</Label>
-                <div className="flex gap-2 mt-1">
-                  <Select value={addF.periodM} onValueChange={v=>setAddF({...addF,periodM:v})}><SelectTrigger className="w-24"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map((m,i)=><SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent></Select>
-                  <Select value={addF.periodY} onValueChange={v=>setAddF({...addF,periodY:v})}><SelectTrigger className="w-20"><SelectValue /></SelectTrigger><SelectContent>{yrs.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
-                </div>
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={addAdhoc}>Save</Button>
-                <Button variant="ghost" onClick={() => setShowAdd(false)}>Cancel</Button>
-              </div>
+              {msg.text && showGenerateExpenses && !showAdd && <p className={`text-xs ${msg.ok ? "text-green-600" : "text-amber-600"}`}>{msg.text}</p>}
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
-            <SlidersHorizontal className="size-4" />
-          </Button>
-        </CardHeader>
-        <CardContent className="space-y-3">
+          {showAdd && (
+            <div className="rounded-md border-l-4 border-teal-400 bg-teal-50/60 dark:bg-teal-950/20 p-3 space-y-2">
+              <p className="text-xs font-medium text-teal-800 dark:text-teal-200">Record expense</p>
+              <div className="flex flex-wrap gap-2 items-end">
+                <Input value={addF.title} onChange={e=>setAddF({...addF,title:e.target.value})} placeholder="Title" className="h-8 w-32" />
+                <Select value={addF.category||"none"} onValueChange={v=>setAddF({...addF,category:v==="none"?"":v})}>
+                  <SelectTrigger className="h-8 w-28"><SelectValue placeholder="Category" /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{serviceCategories.map(c=><SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Select value={addF.vendor||"none"} onValueChange={v=>setAddF({...addF,vendor:v==="none"?"":v})}>
+                  <SelectTrigger className="h-8 w-28"><SelectValue placeholder="Vendor" /></SelectTrigger>
+                  <SelectContent><SelectItem value="none">—</SelectItem>{vendors.map(v=><SelectItem key={v.id} value={v.name}>{v.name}</SelectItem>)}</SelectContent>
+                </Select>
+                <Input type="number" step="0.01" value={addF.amount} onChange={e=>setAddF({...addF,amount:e.target.value})} placeholder="Amount" className="h-8 w-20" />
+                <Select value={addF.periodM} onValueChange={v=>setAddF({...addF,periodM:v})}><SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map((m,i)=><SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent></Select>
+                <Select value={addF.periodY} onValueChange={v=>setAddF({...addF,periodY:v})}><SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger><SelectContent>{yrs.map(y=><SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+                <Button size="sm" className="h-8" onClick={addAdhoc}>Save</Button>
+                <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowAdd(false)}>Cancel</Button>
+              </div>
+              {msg.text && showAdd && <p className={`text-xs ${msg.ok ? "text-green-600" : "text-amber-600"}`}>{msg.text}</p>}
+            </div>
+          )}
+          {msg.text && !showGenerateExpenses && !showAdd && <p className={`text-xs ${msg.ok ? "text-green-600" : "text-amber-600"}`}>{msg.text}</p>}
           <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
             <div className="min-h-0 overflow-hidden">
               <div className="flex flex-wrap gap-2 items-end pb-3">
@@ -908,9 +985,14 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                       : <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
                   </td>
                   <td className="py-3">
-                    <Button size="sm" variant="ghost" className="h-7 text-xs" disabled={!(e.period_month != null && e.period_year != null && isPeriodEditable(e.period_month, e.period_year))} onClick={() => e.paid_at ? markExpenseUnpaid(e.id) : markExpensePaid(e.id)}>
-                      {e.paid_at ? "Mark unpaid" : "Mark paid"}
-                    </Button>
+                    <div className="flex items-center gap-1">
+                      <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => setExpenseDocsFor(e)} title="Attach documents (invoice, contract)">
+                        <Paperclip className="size-3.5 mr-0.5" /> Docs
+                      </Button>
+                      <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => e.paid_at ? markExpenseUnpaid(e.id) : markExpensePaid(e.id)}>
+                        {e.paid_at ? "Unpaid" : "Paid"}
+                      </Button>
+                    </div>
                   </td>
                 </tr>
               ))}
