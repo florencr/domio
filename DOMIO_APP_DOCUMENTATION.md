@@ -69,7 +69,7 @@ domio-app/
 │   │   ├── login/page.tsx
 │   │   └── signup/page.tsx
 │   ├── api/                    # REST API routes
-│   │   ├── admin/              # Admin CRUD (sites, buildings, managers)
+│   │   ├── admin/              # Admin CRUD, maintenance, audit-log
 │   │   ├── auth/signout/
 │   │   ├── bills/
 │   │   ├── expenses/
@@ -145,6 +145,8 @@ domio-app/
 - **Sites**: List, create, update; assign managers.
 - **Managers**: Create (with optional site); list; edit via `/admin/managers/[id]`.
 - **Buildings**: Create, update, delete.
+- **Maintenance**: Toggle delete locks (bills/expenses); clear site data (keeps user accounts).
+- **Audit Log**: View all changes across sites (entity type filter, who/what/when).
 - **Multi-site**: Sites isolate data; managers scoped to their site(s).
 
 ### Manager
@@ -155,11 +157,13 @@ domio-app/
   - Mark paid/unpaid.
   - Filters: Period, unit type, unit, payment status.
   - Sortable columns.
-  - Period lock: only current and previous month editable.
+  - Lock: bill delete only current month; amount locked for past periods; status/paid_at always editable.
 - **Expenses**: Create, filter (period, category, vendor, frequency), sort.
 - **Payments**: View payments, mark paid/unpaid.
 - **Ledger**: Income vs expenses, running balance.
+- **Documents**: Attach contracts, invoices, maintenance docs to buildings or expenses. Categories: contract, maintenance, invoice, other.
 - **Notifications**: Send to owners, tenants, by unit type; filter by unpaid.
+- **Audit Log**: View changes for their site only (entity type filter).
 - **Mobile**: Bottom tabs (Billing, Expenses, Payments, Ledger); config via cog icon.
 
 ### Owner
@@ -207,6 +211,8 @@ domio-app/
 | `notifications` | title, body, created_by, target_audience, target_unit_types, unpaid_only |
 | `notification_recipients` | notification_id, user_id, read_at |
 | `device_tokens` | user_id, token, platform (push notification FCM/APNS tokens) |
+| `audit_log` | id, created_at, user_id, user_email, action, entity_type, entity_id, entity_label, site_id, old_values, new_values |
+| `documents` | id, building_id, unit_id, expense_id, name, path, mime_type, size_bytes, category (contract/maintenance/invoice/other), uploaded_by, created_at |
 
 ### Enums
 
@@ -219,22 +225,33 @@ domio-app/
 
 - `get_my_bills(lim)` – Bills for owner or payment-responsible tenant.
 - `is_manager()`, `is_admin()`, `my_site_id()` – Role/site helpers.
-- `is_period_editable(p_month, p_year)` – True only for current and previous month.
+- `is_period_current(m, y)` – True only for current month (lock logic).
+- `is_period_editable(m, y)` – True for current and previous month (UI).
 
 ### Triggers
 
 - `generate_bill_reference`, `generate_expense_reference`.
-- `prevent_bill_delete_locked`, `prevent_expense_delete_locked`.
-- `prevent_bill_update_locked`, `prevent_expense_update_locked` – Block edits when period is locked.
+- `trg_prevent_bill_delete_locked` – Blocks bill DELETE when period is not current month.
+- `trg_prevent_bill_update_locked` – Blocks bill amount change for past periods; status/paid_at always editable.
+- `trg_prevent_bill_line_update_locked`, `trg_prevent_bill_line_delete_locked` – Block bill line edits when parent bill period is past.
+- `trg_prevent_expense_delete_locked` – Blocks expense DELETE when paid.
+- `trg_prevent_expense_update_locked` – Blocks amount/category/vendor/title change when paid; paid_at always editable.
 
-### Period Lock
+### Lock Rules (updated)
 
-Only the current month and previous month can be edited or deleted for bills and expenses. Older periods are locked via triggers.
+| Entity | Delete | Update |
+|--------|-------|--------|
+| **Bills** | Only current month. Past months cannot be deleted. | Status and paid_at can change anytime. Amount locked for past periods. |
+| **Bill lines** | Locked when parent bill period is past. | Same. |
+| **Expenses** | Only when unpaid. Paid expenses cannot be deleted. | Amount, category, vendor, title locked when paid. paid_at can change anytime. |
+
+- `is_period_current(m, y)` – True only for current month (used by delete/amount locks).
+- `is_period_editable(m, y)` – True for current and previous month (used by UI for display).
 
 ### Storage
 
-- Bucket: `payment-slips`
-- Paths: `payer-{id}/{year}-{month}.{ext}` for slips, `{billId}.{ext}` for bill receipts.
+- Bucket: `payment-slips` – Paths: `payer-{id}/{year}-{month}.{ext}` for slips, `{billId}.{ext}` for bill receipts.
+- Bucket: `documents` – Contracts, invoices, maintenance files. Manager-uploaded via API.
 
 ---
 
@@ -261,6 +278,10 @@ Only the current month and previous month can be edited or deleted for bills and
 | `/api/admin/buildings/[id]` | PATCH, DELETE | Update/delete building |
 | `/api/admin/create-manager` | POST | Create manager and optional site |
 | `/api/admin/managers/[id]` | PATCH | Update manager |
+| `/api/admin/maintenance` | GET, POST | Get lock state; toggle locks; clear site data |
+| `/api/admin/audit-log` | GET | List audit entries (admin: all; manager: own site). Params: limit, offset, entityType |
+| `/api/documents` | GET, POST | List by buildingId or expenseId; upload (FormData: file, buildingId|expenseId, category, name) |
+| `/api/documents/[id]` | GET, DELETE | Get signed URL for download; delete document |
 | `/api/users/create` | POST | Create user |
 | `/api/users/update` | PATCH, DELETE, POST | Update/delete/create user |
 
@@ -285,7 +306,7 @@ Only the current month and previous month can be edited or deleted for bills and
 
 - Auth: email/password.
 - DB: PostgreSQL, RLS by role and site.
-- Storage: `payment-slips` bucket.
+- Storage: `payment-slips`, `documents` buckets.
 - Client: `createClient` from `@/lib/supabase/client` (browser).
 - Server: `createClient` from `@/lib/supabase/server` / `@supabase/ssr`.
 
@@ -305,13 +326,37 @@ Only the current month and previous month can be edited or deleted for bills and
 
 ## 11. Mobile Layout
 
+
 - **Owner**: Bottom tabs (My Units, Billing, Ledger); Notifications via bell; filter icon toggles collapsible filters on Billing and Ledger.
 - **Manager**: Bottom tabs (Billing, Expenses, Payments, Ledger); Config via cog; filters collapsible on mobile.
 - **Tenant**: Same pattern as owner where applicable.
 
 ---
 
-## 12. Key Behaviors
+## 12. Audit Logs, Document Management & Lock Rules
+
+### Audit Logs
+
+- **Table**: `audit_log` – Records who did what and when. Fields: user_id, user_email, action (create/update/delete), entity_type, entity_id, entity_label, site_id, old_values, new_values.
+- **Access**: Admin sees all entries; Manager sees only their site. Insert via API (service role); clients cannot insert.
+- **UI**: Admin and Manager dashboards have an Audit tab. Filter by entity type (bills, expenses, sites, etc.).
+
+### Document Management
+
+- **Table**: `documents` – Links to building, unit, or expense. Categories: contract, maintenance, invoice, other.
+- **Storage**: Bucket `documents`. Files uploaded via `/api/documents` POST.
+- **UI**: Manager Config → Documents (per building); Expenses table has "Attach documents" for invoices/contracts per expense.
+- **APIs**: GET list by buildingId or expenseId; POST upload; GET/[id] signed URL; DELETE.
+
+### Lock Rules (summary)
+
+- **Bills**: Delete only current month. Amount locked for past periods; status/paid_at always editable.
+- **Expenses**: Delete only when unpaid. When paid: amount, category, vendor, title locked; paid_at editable.
+- **Bill lines**: Locked when parent bill period is past.
+
+---
+
+## 13. Key Behaviors
 
 - **PDF invoice**: Generated per (period, paymentResponsibleId) for owner, or per bill.
 - **Receipt upload**: Owner/tenant uploads slip; stored in Supabase Storage; path recorded.
@@ -320,7 +365,7 @@ Only the current month and previous month can be edited or deleted for bills and
 
 ---
 
-## 13. Push Notifications
+## 14. Push Notifications
 
 Push notifications use Capacitor's `@capacitor/push-notifications` plugin and Firebase Cloud Messaging (FCM).
 

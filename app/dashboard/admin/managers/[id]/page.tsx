@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { useRouter, useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -179,9 +180,12 @@ export default function EditManagerPage() {
           <DomioLogo className="h-9 w-auto" />
           <span className="text-xs text-muted-foreground">Administrator</span>
         </Link>
-        <Link href="/dashboard/admin">
+        <div className="flex items-center gap-2">
+          <ThemeToggle />
+          <Link href="/dashboard/admin">
           <Button variant="outline" size="sm"><ArrowLeft className="size-4 mr-1" />Back</Button>
         </Link>
+        </div>
       </header>
 
       <div className="max-w-2xl space-y-4">

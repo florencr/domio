@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Image from "next/image";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 export default function HomePage() {
   const [user, setUser] = useState<{ id: string } | null>(null);
@@ -68,6 +69,9 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-muted/30">
+      <div className="fixed top-4 right-4">
+        <ThemeToggle />
+      </div>
       <main className="flex flex-col items-center gap-6 text-center max-w-sm w-full">
         {user ? (
           <div className="flex flex-col gap-3 w-full">
@@ -84,7 +88,7 @@ export default function HomePage() {
           <Card className="w-full">
             <CardHeader className="pb-2">
               <div className="flex flex-col items-center gap-1.5 mb-6">
-                <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
+                <Image src="/domio-icon.webp" alt="Domio" width={120} height={120} className="mx-auto bg-transparent dark:invert dark:opacity-95" priority />
                 <span className="font-bold text-foreground">Condo Management (HOA)</span>
               </div>
               <CardDescription className="text-center -mt-4 mb-1">Sign in to your account</CardDescription>

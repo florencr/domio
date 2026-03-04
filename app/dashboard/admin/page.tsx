@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LogOut, User, Pencil, Plus, LayoutGrid, Users, Building2, Home, History, Settings } from "lucide-react";
 import { DomioLogo } from "@/components/DomioLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -175,6 +176,7 @@ export default function AdminPage() {
           <span className="text-xs text-muted-foreground">Administrator</span>
         </Link>
         <div className="flex gap-2">
+          <ThemeToggle />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="h-9 w-auto md:px-3 md:gap-2">

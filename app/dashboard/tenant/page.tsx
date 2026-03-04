@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import Link from "next/link";
 import { LogOut, User, Camera, FileText, Download, Home, BookOpen, Bell, SlidersHorizontal, AlertTriangle, CreditCard } from "lucide-react";
 import { NotificationBell, NotificationItem } from "@/components/NotificationBell";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { DomioLogo } from "@/components/DomioLogo";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
@@ -213,12 +214,13 @@ export default function TenantPage() {
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
       <input type="file" ref={fileInputRef} accept="image/*,.pdf" className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; const t = uploadTargetRef.current; if (f && (t.billId || (t.periodMonth != null && t.periodYear != null))) uploadSlip(t, f); e.target.value = ""; }} />
-      <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
+      <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 dark:bg-background/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
         <Link href="/dashboard/tenant" className="flex items-center gap-2">
           <DomioLogo className="h-9 w-auto shrink-0" />
           <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Tenant Dashboard</span>
         </Link>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <NotificationBell onSeeAllClick={() => setTab("notifications")} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>

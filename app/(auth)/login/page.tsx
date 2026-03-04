@@ -47,7 +47,7 @@ export default function LoginPage() {
     <Card className="w-full max-w-sm">
       <CardHeader className="pb-2">
         <div className="flex flex-col items-center gap-1.5 mb-6">
-          <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
+          <Image src="/domio-icon.webp" alt="Domio" width={120} height={120} className="mx-auto bg-transparent dark:invert dark:opacity-95" priority />
           <span className="font-bold text-foreground">Condo Management (HOA)</span>
         </div>
         <CardDescription className="text-center -mt-4 mb-1">Sign in to your account</CardDescription>

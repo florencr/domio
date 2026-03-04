@@ -192,8 +192,8 @@ export async function GET(request: Request) {
     let y = 50;
     const pageWidth = doc.page.width - 100;
 
-    const logoPath = path.join(process.cwd(), "public", "domio-icon.png");
-    const logoPathFallback = path.join(process.cwd(), "public", "domio-logo.png");
+const logoPath = path.join(process.cwd(), "public", "domio-icon.webp");
+  const logoPathFallback = path.join(process.cwd(), "public", "domio-logo.webp");
     if (fs.existsSync(logoPath)) {
       doc.image(logoPath, 50, y, { width: 60 });
     } else if (fs.existsSync(logoPathFallback)) {

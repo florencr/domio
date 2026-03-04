@@ -63,7 +63,7 @@ export default function SignUpPage() {
     <Card className="w-full max-w-sm">
       <CardHeader>
         <CardTitle className="flex justify-center">
-          <Image src="/domio-icon.png" alt="Domio" width={120} height={120} className="mx-auto" priority />
+          <Image src="/domio-icon.webp" alt="Domio" width={120} height={120} className="mx-auto bg-transparent dark:invert dark:opacity-95" priority />
         </CardTitle>
         <CardDescription>Create your account</CardDescription>
       </CardHeader>

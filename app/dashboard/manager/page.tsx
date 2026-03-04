@@ -14,6 +14,7 @@ import Link from "next/link";
 import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, SlidersHorizontal, ChevronDown, ChevronUp, Paperclip, X } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 
 // ─── Types ──────────────────────────────────────────────────────────────
@@ -269,6 +270,7 @@ export default function ManagerPage() {
           </Link>
         </div>
         <div className="flex items-center gap-2">
+          <ThemeToggle />
           <NotificationBell isManager onSendClick={() => { setTab("config"); setConfigSubTab("notifications"); setShowSendNotif(false); }} onSeeAllClick={() => { setTab("config"); setConfigSubTab("notifications"); }} />
           <Button variant="ghost" size="icon" onClick={() => setTab("config")} title="Configuration"><Settings className="size-5" /></Button>
           <DropdownMenu>
