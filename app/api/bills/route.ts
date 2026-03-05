@@ -23,7 +23,9 @@ export async function PATCH(request: Request) {
       const { data: unitOwners } = await sb.from("unit_owners").select("unit_id").eq("owner_id", ownerId);
       const unitIds = (unitOwners ?? []).map((u: { unit_id: string }) => u.unit_id);
       if (!unitIds.length) return NextResponse.json({ success: false, error: "No units for owner" }, { status: 404 });
-      const update = paid ? { paid_at: new Date().toISOString(), status: "paid" } : { paid_at: null, status: "draft" };
+      const update = paid
+        ? { paid_at: new Date().toISOString(), status: "paid" }
+        : { paid_at: null, status: "draft", receipt_url: null, receipt_filename: null, receipt_path: null };
       const { error } = await sb.from("bills").update(update).in("unit_id", unitIds).eq("period_month", periodMonth).eq("period_year", periodYear);
       if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
@@ -34,7 +36,7 @@ export async function PATCH(request: Request) {
     if (fetchErr || !bill) return NextResponse.json({ success: false, error: "Bill not found" }, { status: 404 });
     const update = paid
       ? { paid_at: new Date().toISOString(), status: "paid" }
-      : { paid_at: null, status: "draft" };
+      : { paid_at: null, status: "draft", receipt_url: null, receipt_filename: null, receipt_path: null };
     const { error } = await sb.from("bills").update(update).eq("id", billId);
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Fragment } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,6 +28,7 @@ type UnitType = { id: string; name: string };
 type Vendor = { id: string; name: string };
 type ServiceCategory = { id: string; name: string };
 type Bill = { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null; reference_code?: string | null };
+type BillLine = { bill_id: string; line_type: string; description: string; amount: number };
 type UnitOwner = { unit_id: string; owner_id: string };
 type UnitTenantAssignment = { unit_id: string; tenant_id: string; is_payment_responsible?: boolean };
 
@@ -37,13 +38,13 @@ type Data = {
   buildings: Building[]; units: Unit[]; services: Service[];
   expenses: Expense[]; profiles: Profile[]; unitTypes: UnitType[];
   vendors: Vendor[]; serviceCategories: ServiceCategory[];
-  bills: Bill[]; unitOwners: UnitOwner[]; unitTenantAssignments: UnitTenantAssignment[];
+  bills: Bill[]; billLines: BillLine[]; unitOwners: UnitOwner[]; unitTenantAssignments: UnitTenantAssignment[];
 };
 
 const EMPTY: Data = {
   profile: null, site: null, buildings: [], units: [], services: [], expenses: [],
   profiles: [], unitTypes: [], vendors: [], serviceCategories: [],
-  bills: [], unitOwners: [], unitTenantAssignments: [],
+  bills: [], billLines: [], unitOwners: [], unitTenantAssignments: [],
 };
 
 const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -188,13 +189,12 @@ export default function ManagerPage() {
       sb.from("units").select("id,unit_name,type,size_m2,building_id,entrance,floor"),
       sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category,site_id"),
       sb.from("expenses").select("id,title,category,vendor,amount,frequency,created_at,paid_at,period_month,period_year,template_id,site_id"),
-      sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url"),
+      fetch("/api/manager/users").then(r => r.ok ? r.json() : []),
       fetch("/api/manager/unit-types").then(r => r.ok ? r.json() : []),
-      sb.from("vendors").select("id,name,site_id"),
-      sb.from("service_categories").select("id,name,site_id"),
+      fetch("/api/manager/vendors").then(r => r.ok ? r.json() : []),
+      fetch("/api/manager/service-categories").then(r => r.ok ? r.json() : []),
       sb.from("bills").select("id,unit_id,period_month,period_year,total_amount,status,paid_at,receipt_url,receipt_filename,receipt_path,reference_code").order("period_year",{ascending:false}).order("period_month",{ascending:false}).limit(200),
-      sb.from("unit_owners").select("unit_id,owner_id"),
-      sb.from("unit_tenant_assignments").select("unit_id,tenant_id,is_payment_responsible"),
+      fetch("/api/manager/unit-assignments").then(r => r.ok ? r.json() : { unitOwners: [], unitTenantAssignments: [] }),
     ]);
 
     let profile = results[0].data as Profile | null;
@@ -211,23 +211,30 @@ export default function ManagerPage() {
     const allServices = (results[4].data ?? []) as Service[];
     const allExpenses = (results[5].data ?? []) as Expense[];
     const allUnitTypes = (results[7] ?? []) as UnitType[];
-    const allVendors = (results[8].data ?? []) as Vendor[];
-    const allServiceCategories = (results[9].data ?? []) as ServiceCategory[];
+    const allVendors = (results[8] ?? []) as Vendor[];
+    const allServiceCategories = (results[9] ?? []) as ServiceCategory[];
 
     const buildings = siteId ? buildingsData.filter(b => b.site_id === siteId) : buildingsData;
     const buildingIds = new Set(buildings.map(b => b.id));
     const units = siteId ? allUnits.filter(u => buildingIds.has(u.building_id)) : allUnits;
     const unitIds = new Set(units.map(u => u.id));
-    const unitOwnersFiltered = siteId ? (results[11].data ?? []).filter((uo: UnitOwner) => unitIds.has(uo.unit_id)) as UnitOwner[] : (results[11].data ?? []) as UnitOwner[];
-    const unitTenantAssignmentsFiltered = siteId ? (results[12].data ?? []).filter((a: UnitTenantAssignment) => unitIds.has(a.unit_id)) as UnitTenantAssignment[] : (results[12].data ?? []) as UnitTenantAssignment[];
-    const siteUserIds = new Set([...unitOwnersFiltered.map((uo: UnitOwner) => uo.owner_id), ...unitTenantAssignmentsFiltered.map((a: UnitTenantAssignment) => a.tenant_id)]);
-    const allProfiles = (results[6].data ?? []) as Profile[];
-    const profiles = siteId ? allProfiles.filter(p => siteUserIds.has(p.id)) : allProfiles;
+    const assignmentsRes = results[11] as { unitOwners: UnitOwner[]; unitTenantAssignments: UnitTenantAssignment[] };
+    const unitOwnersFiltered = assignmentsRes?.unitOwners ?? [];
+    const unitTenantAssignmentsFiltered = assignmentsRes?.unitTenantAssignments ?? [];
+    const profiles = (results[6] ?? []) as Profile[];
     const services = siteId ? allServices.filter((s: Service & { site_id?: string | null }) => !s.site_id || s.site_id === siteId) : allServices;
     const expenses = siteId ? allExpenses.filter((e: Expense & { site_id?: string | null }) => !e.site_id || e.site_id === siteId) : allExpenses;
     const unitTypes = siteId ? allUnitTypes.filter((ut: UnitType & { site_id?: string | null }) => !ut.site_id || ut.site_id === siteId) : allUnitTypes;
     const vendors = siteId ? allVendors.filter((v: Vendor & { site_id?: string | null }) => !v.site_id || v.site_id === siteId) : allVendors;
-    const serviceCategories = siteId ? allServiceCategories.filter((c: ServiceCategory & { site_id?: string | null }) => !c.site_id || c.site_id === siteId) : allServiceCategories;
+    const serviceCategories = allServiceCategories;
+
+    const bills = siteId ? (results[10].data ?? []).filter((b: Bill) => unitIds.has(b.unit_id)) as Bill[] : (results[10].data ?? []) as Bill[];
+    const billIds = bills.map((b: Bill) => b.id);
+    let billLines: BillLine[] = [];
+    if (billIds.length > 0) {
+      const { data: linesData } = await sb.from("bill_lines").select("bill_id, line_type, description, amount").in("bill_id", billIds);
+      billLines = (linesData ?? []) as BillLine[];
+    }
 
     setData({
       profile,
@@ -240,7 +247,8 @@ export default function ManagerPage() {
       unitTypes,
       vendors,
       serviceCategories,
-      bills: siteId ? (results[10].data ?? []).filter((b: Bill) => unitIds.has(b.unit_id)) as Bill[] : (results[10].data ?? []) as Bill[],
+      bills,
+      billLines,
       unitOwners: unitOwnersFiltered,
       unitTenantAssignments: unitTenantAssignmentsFiltered,
     });
@@ -355,7 +363,7 @@ export default function ManagerPage() {
         <TabsContent value="billing"><BillingTab data={data} reload={load} addBills={newBills => setData(prev => ({ ...prev, bills: [...(prev.bills || []), ...newBills] }))} /></TabsContent>
         <TabsContent value="expenses"><ExpensesTab data={data} reload={load} /></TabsContent>
         <TabsContent value="payments"><PaymentsTab bills={data.bills} units={data.units} profiles={data.profiles} unitOwners={data.unitOwners} /></TabsContent>
-        <TabsContent value="ledger"><LedgerTab bills={data.bills} expenses={data.expenses} units={data.units} unitTypes={data.unitTypes} vendors={data.vendors} serviceCategories={data.serviceCategories} /></TabsContent>
+        <TabsContent value="ledger"><LedgerTab bills={data.bills} billLines={data.billLines} expenses={data.expenses} units={data.units} unitTypes={data.unitTypes} vendors={data.vendors} serviceCategories={data.serviceCategories} /></TabsContent>
         <TabsContent value="config"><ConfigTab data={data} reload={load} configSubTab={configSubTab} setConfigSubTab={setConfigSubTab} /></TabsContent>
         </div>
       </Tabs>
@@ -377,11 +385,34 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   const [filterPaymentStatus, setFilterPaymentStatus] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [showGenerateBills, setShowGenerateBills] = useState(false);
+  const [showAddAdhocBill, setShowAddAdhocBill] = useState(false);
+  const [addingAdhoc, setAddingAdhoc] = useState(false);
+  const [expandedBillIds, setExpandedBillIds] = useState<Set<string>>(new Set());
+  const now = new Date();
+  const [addAdhocForm, setAddAdhocForm] = useState({
+    description: "",
+    unitType: "all",
+    pricingModel: "fixed",
+    amount: "",
+    periodM: String(now.getMonth() + 1),
+    periodY: String(now.getFullYear()),
+  });
 
   const unitMap = new Map(data.units.map(u => [u.id, u]));
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
   const profileMap = new Map(data.profiles.map(p => [p.id, p]));
   const buildingMap = new Map(data.buildings.map(b => [b.id, b.name]));
+  const linesByBill = new Map<string, BillLine[]>();
+  (data.billLines ?? []).forEach(l => {
+    const list = linesByBill.get(l.bill_id) ?? [];
+    list.push(l);
+    linesByBill.set(l.bill_id, list);
+  });
+  const toggleExpand = (id: string) => setExpandedBillIds(prev => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
   const unitBillToMap = new Map<string, string>();
   data.unitTenantAssignments.forEach(a => {
     if (!unitBillToMap.has(a.unit_id) && a.is_payment_responsible !== false) unitBillToMap.set(a.unit_id, a.tenant_id);
@@ -392,43 +423,17 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
     setGenerating(true);
     setMsg({text:"",ok:true});
     try {
-      const sb = createClient();
       const m = parseInt(month), y = parseInt(year);
-
-      const existing = await sb.from("bills").select("unit_id").eq("period_month", m).eq("period_year", y);
-      const done = new Set((existing.data ?? []).map((b: {unit_id:string}) => b.unit_id));
-      const toProcess = data.units.filter(u => !done.has(u.id));
-      if (!toProcess.length) { setMsg({text:"Bills already generated for this period.",ok:false}); setGenerating(false); return; }
-
-      // Recurrent templates = template_id null, period null (definitions in Config)
-      const recurrentTemplates = data.expenses.filter(e => e.frequency === "recurrent" && e.template_id == null && e.period_month == null);
-      // Generate expense records for this period (if not already)
-      for (const t of recurrentTemplates) {
-        const existingExp = await sb.from("expenses").select("id").eq("template_id", t.id).eq("period_month", m).eq("period_year", y).limit(1);
-        if (!(existingExp.data?.length)) {
-          const ins = await sb.from("expenses").insert({ title: t.title, category: t.category, vendor: t.vendor, amount: t.amount, frequency: "recurrent", template_id: t.id, period_month: m, period_year: y }).select();
-          if (ins.error) { setMsg({text: ins.error.message || "Failed to create expense record", ok: false}); setGenerating(false); return; }
-        }
+      const res = await fetch("/api/manager/generate-bills", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ month: m, year: y }) });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.success) {
+        setMsg({ text: `✓ Generated ${j.count ?? 0} bill${(j.count ?? 0) > 1 ? "s" : ""}.`, ok: true });
+        await reload();
+      } else {
+        setMsg({ text: j.error || "Failed to generate", ok: false });
       }
-      // Bills = services only (no shared expenses in unit bills)
-      const recurrentServices = data.services.filter(s => s.frequency === "recurrent");
-      const rows = toProcess.map(unit => {
-        const unitServices = recurrentServices.filter(s => s.unit_type === unit.type);
-        const servicesTotal = unitServices.reduce((s, svc) => {
-          if (svc.pricing_model === "per_m2" && unit.size_m2) return s + Number(svc.price_value) * Number(unit.size_m2);
-          return s + Number(svc.price_value);
-        }, 0);
-        return { unit_id: unit.id, period_month: m, period_year: y, total_amount: Math.round(servicesTotal * 100) / 100, status: "draft" };
-      });
-
-      const insBills = await sb.from("bills").insert(rows).select();
-      if (insBills.error) { setMsg({text: insBills.error.message || "Failed to create bills", ok: false}); setGenerating(false); return; }
-      const inserted = (insBills.data ?? []) as Bill[];
-      if (addBills && inserted.length) addBills(inserted);
-      setMsg({text:`✓ Generated ${rows.length} bill${rows.length>1?"s":""}.`,ok:true});
-      await reload();
     } catch (err) {
-      setMsg({text: (err as Error).message || "An error occurred", ok: false});
+      setMsg({ text: (err as Error).message || "An error occurred", ok: false });
     }
     setGenerating(false);
   }
@@ -456,6 +461,40 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
     const r = await res.json();
     if (r.success) reload();
     else setMsg({ text: r.error || "Failed", ok: false });
+  }
+
+  async function addAdhocBill() {
+    if (!addAdhocForm.description.trim()) { setMsg({ text: "Description is required", ok: false }); return; }
+    const amt = parseFloat(addAdhocForm.amount);
+    if (isNaN(amt) || amt <= 0) { setMsg({ text: "Amount must be positive", ok: false }); return; }
+    setAddingAdhoc(true);
+    setMsg({ text: "", ok: true });
+    try {
+      const res = await fetch("/api/manager/ad-hoc-bill", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          description: addAdhocForm.description.trim(),
+          unitType: addAdhocForm.unitType,
+          pricingModel: addAdhocForm.pricingModel,
+          amount: amt,
+          periodMonth: parseInt(addAdhocForm.periodM, 10),
+          periodYear: parseInt(addAdhocForm.periodY, 10),
+        }),
+      });
+      const j = await res.json().catch(() => ({}));
+      if (res.ok && j.success) {
+        setMsg({ text: j.message ?? `✓ Added ${j.linesAdded ?? 0} ad hoc charge(s).`, ok: true });
+        setAddAdhocForm({ description: "", unitType: "all", pricingModel: "fixed", amount: "", periodM: String(now.getMonth() + 1), periodY: String(now.getFullYear()) });
+        setShowAddAdhocBill(false);
+        await reload();
+      } else {
+        setMsg({ text: j.error ?? "Failed", ok: false });
+      }
+    } catch (err) {
+      setMsg({ text: (err as Error).message ?? "An error occurred", ok: false });
+    }
+    setAddingAdhoc(false);
   }
 
   const yrs = [new Date().getFullYear(), new Date().getFullYear() - 1];
@@ -507,9 +546,12 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
         <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
           <CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle>
           <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => setShowGenerateBills(v => !v)}>
+            <Button size="sm" className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => { setShowGenerateBills(v => !v); setShowAddAdhocBill(false); }}>
               {showGenerateBills ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
               Generate bills
+            </Button>
+            <Button size="sm" className="h-8 gap-1 bg-green-500 hover:bg-green-600 text-white border-0" onClick={() => { setShowAddAdhocBill(v => !v); setShowGenerateBills(false); }}>
+              + Add ad hoc charge
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
               <SlidersHorizontal className="size-4" />
@@ -531,20 +573,47 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                 </Select>
                 <Button size="sm" className="h-8" onClick={generate} disabled={generating}>{generating ? "..." : "Generate"}</Button>
                 <Button variant="outline" size="sm" className="h-8" disabled={!isPeriodCurrent(parseInt(month), parseInt(year))} onClick={async () => {
-                  const sb = createClient();
                   const m = parseInt(month), y = parseInt(year);
-                  const res = await sb.from("bills").delete().eq("period_month", m).eq("period_year", y).select("*");
-                  const n = res.data?.length ?? 0;
-                  setMsg({text:`✓ Deleted ${n} bill(s).`,ok:true});
+                  const res = await fetch(`/api/manager/delete-bills-period?month=${m}&year=${y}`, { method: "DELETE" });
+                  const json = await res.json();
+                  if (!res.ok) { setMsg({ text: json.error ?? "Failed", ok: false }); return; }
+                  const b = json.billsDeleted ?? 0;
+                  const e = json.expensesDeleted ?? 0;
+                  setMsg({ text: `✓ Deleted ${b} bill(s) and ${e} expense(s).`, ok: true });
                   reload();
                 }}>Delete period</Button>
               </div>
               <div className="text-xs text-muted-foreground">
                 <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
-                <strong>Shared expenses/month:</strong> {data.expenses.filter(e=>e.frequency==="recurrent").reduce((s,e)=>s+Number(e.amount),0).toFixed(2)} &nbsp;|&nbsp;
                 <strong>Units to bill:</strong> {data.units.length}
               </div>
               {msg.text && <p className={`text-xs ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
+            </div>
+          )}
+          {showAddAdhocBill && (
+            <div className="rounded-md border-l-4 border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 space-y-2">
+              <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Add ad hoc charge (one-off extra billing per unit)</p>
+              <div className="flex flex-wrap gap-2 items-end">
+                <Input value={addAdhocForm.description} onChange={e=>setAddAdhocForm({...addAdhocForm,description:e.target.value})} placeholder="Description (e.g. Extra maintenance)" className="h-8 w-40" />
+                <div><Label className="text-xs">Unit type</Label>
+                  <Select value={addAdhocForm.unitType} onValueChange={v=>setAddAdhocForm({...addAdhocForm,unitType:v})}>
+                    <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="all">All types</SelectItem>{[...new Set(data.units.map(u=>u.type))].map(t=> <SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+                <div><Label className="text-xs">Pricing</Label>
+                  <Select value={addAdhocForm.pricingModel} onValueChange={v=>setAddAdhocForm({...addAdhocForm,pricingModel:v})}>
+                    <SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="fixed">Fixed</SelectItem><SelectItem value="per_m2">Per m²</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <Input type="number" step="0.01" value={addAdhocForm.amount} onChange={e=>setAddAdhocForm({...addAdhocForm,amount:e.target.value})} placeholder={addAdhocForm.pricingModel==="per_m2"?"Rate €/m²":"Amount €"} className="h-8 w-24" />
+                <Select value={addAdhocForm.periodM} onValueChange={v=>setAddAdhocForm({...addAdhocForm,periodM:v})}><SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map((m,i)=><SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent></Select>
+                <Select value={addAdhocForm.periodY} onValueChange={v=>setAddAdhocForm({...addAdhocForm,periodY:v})}><SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger><SelectContent>{yrs.map(y=> <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
+                <Button size="sm" className="h-8" onClick={addAdhocBill} disabled={addingAdhoc}>{addingAdhoc ? "..." : "Save"}</Button>
+                <Button variant="ghost" size="sm" className="h-8" onClick={() => setShowAddAdhocBill(false)}>Cancel</Button>
+              </div>
+              {msg.text && showAddAdhocBill && <p className={`text-xs ${msg.ok?"text-green-600":"text-amber-600"}`}>{msg.text}</p>}
             </div>
           )}
           <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
@@ -589,6 +658,8 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                 <SortableTh column="building" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Building</SortableTh>
                 <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Owner</SortableTh>
                 <SortableTh column="billTo" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</SortableTh>
+                <th className="pb-3 pr-4 font-medium text-muted-foreground">Type</th>
+                <th className="pb-3 pr-4 font-medium text-muted-foreground">Description</th>
                 <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">Amount</SortableTh>
                 <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
                 <th className="pb-3 pr-4 font-medium text-muted-foreground">Slip</th>
@@ -596,59 +667,79 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {sortedBills.map(b => {
-                const unit = unitMap.get(b.unit_id);
-                const ownerId = ownerMap.get(b.unit_id);
-                const owner = ownerId ? profileMap.get(ownerId) : null;
-                const billToId = unitBillToMap.get(b.unit_id);
-                const billTo = billToId ? profileMap.get(billToId) : null;
-                return (
-                  <tr key={b.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
-                    <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
-                    <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
-                    <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
-                    <td className="py-3 pr-4">
-                      {b.paid_at
-                        ? <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span>
-                        : b.status === "in_process"
-                        ? <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span>
-                        : <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
-                    </td>
-                    <td className="py-3 pr-4">
-                      {(b.receipt_url || b.receipt_path) ? (
-                        <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
-                      ) : (
-                        <span className="text-xs text-muted-foreground">—</span>
-                      )}
-                    </td>
-                    <td className="py-3">
-                      {(() => {
-                        const ownerId = ownerMap.get(b.unit_id);
-                        const k = ownerId ? `${ownerId}-${b.period_month}-${b.period_year}` : "";
-                        const count = ownerId ? ownerPeriodCount.get(k) ?? 1 : 1;
-                        if (count > 1 && ownerId) {
-                          const allPaid = sortedBills.filter(x => ownerMap.get(x.unit_id) === ownerId && x.period_month === b.period_month && x.period_year === b.period_year).every(x => x.paid_at);
+              {(() => {
+                const rows: { bill: Bill; line: BillLine | null; lineIndex: number }[] = [];
+                for (const b of sortedBills) {
+                  const lines = linesByBill.get(b.id) ?? [];
+                  if (lines.length > 0) {
+                    lines.forEach((l, i) => rows.push({ bill: b, line: l, lineIndex: i }));
+                  } else {
+                    rows.push({ bill: b, line: null, lineIndex: 0 });
+                  }
+                }
+                return rows.map(({ bill: b, line, lineIndex }) => {
+                  const unit = unitMap.get(b.unit_id);
+                  const ownerId = ownerMap.get(b.unit_id);
+                  const owner = ownerId ? profileMap.get(ownerId) : null;
+                  const billToId = unitBillToMap.get(b.unit_id);
+                  const billTo = billToId ? profileMap.get(billToId) : null;
+                  const lineTypeLabel = line ? (line.line_type === "manual" ? "Once off" : "Recurrent") : null;
+                  const lineAmount = line != null ? Number(line.amount) : Number(b.total_amount);
+                  return (
+                    <tr key={line ? `${b.id}-${lineIndex}` : b.id} className="hover:bg-muted/30 transition-colors">
+                      <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
+                      <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
+                      <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
+                      <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
+                      <td className="py-3 pr-4">
+                        {lineTypeLabel ? (
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${line.line_type === "manual" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
+                            {lineTypeLabel}
+                          </span>
+                        ) : "—"}
+                      </td>
+                      <td className="py-3 pr-4 text-muted-foreground">{line ? (line.description || "—") : "—"}</td>
+                      <td className="py-3 pr-4 text-right font-semibold tabular-nums">{lineAmount.toFixed(2)}</td>
+                      <td className="py-3 pr-4">
+                        {b.paid_at
+                          ? <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span>
+                          : b.status === "in_process"
+                          ? <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span>
+                          : <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
+                      </td>
+                      <td className="py-3 pr-4">
+                        {(b.receipt_url || b.receipt_path) ? (
+                          <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
+                      <td className="py-3">
+                        {(() => {
+                          const k = ownerId ? `${ownerId}-${b.period_month}-${b.period_year}` : "";
+                          const count = ownerId ? ownerPeriodCount.get(k) ?? 1 : 1;
+                          if (count > 1 && ownerId) {
+                            const allPaid = sortedBills.filter(x => ownerMap.get(x.unit_id) === ownerId && x.period_month === b.period_month && x.period_year === b.period_year).every(x => x.paid_at);
+                            return (
+                              <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => allPaid ? markAllUnpaid(ownerId, b.period_month, b.period_year) : markAllPaid(ownerId, b.period_month, b.period_year)}>
+                                {allPaid ? `Mark all ${count} unpaid` : `Mark all ${count} paid`}
+                              </Button>
+                            );
+                          }
                           return (
-                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => allPaid ? markAllUnpaid(ownerId, b.period_month, b.period_year) : markAllPaid(ownerId, b.period_month, b.period_year)}>
-                              {allPaid ? `Mark all ${count} unpaid` : `Mark all ${count} paid`}
+                            <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
+                              {b.paid_at ? "Mark unpaid" : "Mark paid"}
                             </Button>
                           );
-                        }
-                        return (
-                          <Button size="sm" variant="ghost" className="h-7 text-xs" onClick={() => b.paid_at ? markUnpaid(b.id) : markPaid(b.id)}>
-                            {b.paid_at ? "Mark unpaid" : "Mark paid"}
-                          </Button>
-                        );
-                      })()}
-                    </td>
-                  </tr>
-                );
-              })}
-              {!sortedBills.length && <tr><td colSpan={10} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Use Generate bills to create."}</td></tr>}
+                        })()}
+                      </td>
+                    </tr>
+                  );
+                });
+              })()}
+              {!sortedBills.length && <tr><td colSpan={12} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Use Generate bills to create."}</td></tr>}
             </tbody>
           </table>
           </div>
@@ -801,22 +892,30 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
   }
 
   async function addAdhoc() {
-    const sb = createClient();
     const m = parseInt(addF.periodM), y = parseInt(addF.periodY);
-    const { error } = await sb.from("expenses").insert({
-      title: addF.title,
-      category: addF.category || "Misc",
-      vendor: addF.vendor || "—",
-      amount: parseFloat(addF.amount) || 0,
-      frequency: "ad_hoc",
-      period_month: m,
-      period_year: y,
+    const amt = parseFloat(addF.amount);
+    if (isNaN(amt) || amt <= 0) { setMsg({ text: "Amount must be positive", ok: false }); return; }
+    const res = await fetch("/api/manager/record-ad-hoc-expense", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        title: addF.title.trim(),
+        category: addF.category || "Misc",
+        vendor: addF.vendor || "—",
+        amount: amt,
+        periodMonth: m,
+        periodYear: y,
+      }),
     });
-    if (error) { setMsg({text: "Could not add expense: " + error.message, ok: false}); return; }
-    setMsg({text: "✓ Ad-hoc expense recorded.", ok: true});
-    setAddF({title:"",category:"",vendor:"",amount:"",periodM:String(now.getMonth()+1),periodY:String(now.getFullYear())});
-    setShowAdd(false);
-    reload();
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.success) {
+      setMsg({ text: j.message ?? "✓ Ad-hoc expense recorded as extra row(s) in billing.", ok: true });
+      setAddF({ title: "", category: "", vendor: "", amount: "", periodM: String(now.getMonth() + 1), periodY: String(now.getFullYear()) });
+      setShowAdd(false);
+      reload();
+    } else {
+      setMsg({ text: j.error ?? "Could not add expense", ok: false });
+    }
   }
 
   async function markExpensePaid(id: string) {
@@ -891,11 +990,13 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
                 </Select>
                 <Button size="sm" className="h-8" onClick={generateRecurrent} disabled={generating}>{generating ? "..." : "Generate"}</Button>
                 <Button variant="outline" size="sm" className="h-8" disabled={expenses.some(e => e.period_month === parseInt(month) && e.period_year === parseInt(year) && e.paid_at)} onClick={async () => {
-                  const sb = createClient();
                   const m = parseInt(month), y = parseInt(year);
-                  const res = await sb.from("expenses").delete().eq("period_month", m).eq("period_year", y).select("*");
-                  const n = res.data?.length ?? 0;
-                  setMsg({ text: `✓ Deleted ${n} expense(s).`, ok: true });
+                  const res = await fetch(`/api/manager/delete-bills-period?month=${m}&year=${y}`, { method: "DELETE" });
+                  const json = await res.json();
+                  if (!res.ok) { setMsg({ text: json.error ?? "Failed", ok: false }); return; }
+                  const b = json.billsDeleted ?? 0;
+                  const e = json.expensesDeleted ?? 0;
+                  setMsg({ text: `✓ Deleted ${b} bill(s) and ${e} expense(s).`, ok: true });
                   reload();
                 }}>Delete period</Button>
               </div>
@@ -1114,7 +1215,7 @@ function PaymentsTab({ bills, units, profiles, unitOwners }: { bills: Bill[]; un
 }
 
 // ─── Ledger Tab ───────────────────────────────────────────────────────────
-function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategories }: { bills: Bill[]; expenses: Expense[]; units: Unit[]; unitTypes: UnitType[]; vendors: Vendor[]; serviceCategories: ServiceCategory[] }) {
+function LedgerTab({ bills, billLines, expenses, units, unitTypes, vendors, serviceCategories }: { bills: Bill[]; billLines: BillLine[]; expenses: Expense[]; units: Unit[]; unitTypes: UnitType[]; vendors: Vendor[]; serviceCategories: ServiceCategory[] }) {
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterUnitType, setFilterUnitType] = useState<string>("all");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
@@ -1140,8 +1241,30 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
 
   type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; ref: string; amount: number; status: string };
   const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTHS[parseInt(m||"1")-1]} ${y}`; };
+  const ledgerLinesByBill = new Map<string, BillLine[]>();
+  (billLines ?? []).forEach(l => {
+    const list = ledgerLinesByBill.get(l.bill_id) ?? [];
+    list.push(l);
+    ledgerLinesByBill.set(l.bill_id, list);
+  });
+  const billRows: LedgerRow[] = [];
+  for (const b of filteredBills) {
+    const lines = ledgerLinesByBill.get(b.id) ?? [];
+    const baseLabel = `${unitNameMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`;
+    const baseDate = `${b.period_year}-${String(b.period_month).padStart(2,"0")}`;
+    const baseStatus = b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status;
+    const ref = b.reference_code ?? "—";
+    if (lines.length > 0) {
+      lines.forEach((l, i) => {
+        const lineTypeLabel = l.line_type === "manual" ? "Once off" : "Recurrent";
+        billRows.push({ key: `b-${b.id}-${i}`, date: baseDate, type: "income" as const, label: `${baseLabel} · ${lineTypeLabel}: ${l.description || "—"}`, ref, amount: Math.abs(Number(l.amount)), status: baseStatus });
+      });
+    } else {
+      billRows.push({ key: `b-${b.id}`, date: baseDate, type: "income" as const, label: baseLabel, ref, amount: Math.abs(Number(b.total_amount)), status: baseStatus });
+    }
+  }
   const rows: LedgerRow[] = [
-    ...filteredBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitNameMap.get(b.unit_id)??"—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: b.reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
+    ...billRows,
     ...filteredExpenses.map(e => ({ key:`e-${e.id}`, date: `${e.period_year}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: e.reference_code ?? expenseRef(e), amount: Number(e.amount), status: e.paid_at ? "Paid" : e.frequency })),
   ];
   const getLedgerValue = (r: LedgerRow & { balance?: number }, col: string): string | number => {
@@ -1165,6 +1288,7 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
   const totalIn = rows.filter(r=>r.type==="income").reduce((s,r)=>s+r.amount,0);
   const totalOut = rows.filter(r=>r.type==="expense").reduce((s,r)=>s+r.amount,0);
   const handleLedgerSort = (col: string) => { setSortDir(prev => sortCol === col && prev === "asc" ? "desc" : "asc"); setSortCol(col); };
+  const unfilteredEntryCount = bills.reduce((s,b)=>s+Math.max(1,(ledgerLinesByBill.get(b.id)??[]).length),0)+expenses.filter(e=>e.period_month!=null).length;
 
   return (
     <div className="space-y-4 mt-2">
@@ -1175,7 +1299,7 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
       </div>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <CardTitle>Full Ledger ({rows.length}{rows.length !== bills.length + expenses.filter(e=>e.period_month!=null).length ? ` of ${bills.length + expenses.filter(e=>e.period_month!=null).length}` : ""} entries)</CardTitle>
+          <CardTitle>Full Ledger ({rows.length}{rows.length !== unfilteredEntryCount ? ` of ${unfilteredEntryCount}` : ""} entries)</CardTitle>
           <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
             <SlidersHorizontal className="size-4" />
           </Button>
@@ -1260,7 +1384,7 @@ function LedgerTab({ bills, expenses, units, unitTypes, vendors, serviceCategori
                   <td className={`py-3 text-right font-mono text-sm ${r.balance>=0?"text-blue-600":"text-red-600"}`}>{r.balance.toFixed(2)}</td>
                 </tr>
               ))}
-              {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{bills.length + expenses.filter(e=>e.period_month!=null).length > 0 ? "No entries match filters." : "No transactions yet."}</td></tr>}
+              {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{unfilteredEntryCount > 0 ? "No entries match filters." : "No transactions yet."}</td></tr>}
             </tbody>
           </table>
           </div>
@@ -1282,6 +1406,7 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [sentLog, setSentLog] = useState<SentNotification[]>([]);
   const [logLoading, setLogLoading] = useState(false);
+  const [showSendForm, setShowSendForm] = useState(false);
 
   const loadSent = async () => {
     setLogLoading(true);
@@ -1290,6 +1415,14 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
     setSentLog(json.notifications ?? []);
     setLogLoading(false);
   };
+
+  async function deleteNotification(id: string) {
+    if (!confirm("Delete this notification from the log?")) return;
+    const res = await fetch(`/api/notifications/sent?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const json = await res.json().catch(() => ({}));
+    if (res.ok && json.success) { loadSent(); setMsg({ text: "Deleted.", ok: true }); }
+    else setMsg({ text: json.error || "Failed to delete", ok: false });
+  }
 
   useEffect(() => {
     loadSent();
@@ -1321,6 +1454,7 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
       setMsg({ text: count > 0 ? `Sent to ${count} recipients` : "Notification saved. No recipients found — add owners/tenants in Config > Units.", ok: true });
       loadSent();
       setTitle(""); setBody(""); setSelectedUnitTypes([]); setUnpaidOnly(false);
+      setShowSendForm(false);
       if (count > 0) setTimeout(() => onBack(), 800);
     } else {
       setMsg({ text: json.error || "Failed to send", ok: false });
@@ -1331,55 +1465,62 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
     <div className="flex flex-col w-full min-h-[calc(100vh-16rem)] md:min-h-[420px]">
       <div className="flex-1 overflow-y-auto">
         <div className="space-y-6 w-full">
-          <div className="space-y-4 max-w-md">
-          <div>
-            <Label>Title</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Payment reminder" className="mt-1 w-full" />
-          </div>
-          <div>
-            <Label>Message (optional)</Label>
-            <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..." rows={4} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1" />
-          </div>
-          <div>
-            <Label>Send to</Label>
-            <Select value={targetAudience} onValueChange={(v: "owners" | "tenants" | "both") => setTargetAudience(v)}>
-              <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                <SelectItem value="owners">Owners only</SelectItem>
-                <SelectItem value="tenants">Tenants only</SelectItem>
-                <SelectItem value="both">Owners and Tenants</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {unitTypes.length > 0 && (
-            <div>
-              <Label>Filter by unit type (optional)</Label>
-              <div className="flex flex-wrap gap-2 mt-2">
-                {unitTypes.map(ut => (
-                  <button key={ut.id} type="button" onClick={() => toggleUnitType(ut.name)}
-                    className={`text-xs px-2 py-1 rounded-full border transition-colors ${selectedUnitTypes.includes(ut.name) ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 hover:bg-muted"}`}>
-                    {ut.name}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            <input type="checkbox" id="unpaid-cfg" checked={unpaidOnly} onChange={e => setUnpaidOnly(e.target.checked)} className="rounded" />
-            <Label htmlFor="unpaid-cfg" className="cursor-pointer">Only users with unpaid bills</Label>
-          </div>
-          {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
-          <div className="flex gap-2 pt-2">
-            <Button variant="outline" onClick={onBack} className="flex-1 md:flex-none">Cancel</Button>
-            <Button onClick={send} disabled={sending} className="flex-1 md:flex-none">{sending ? "Sending..." : "Send"}</Button>
-          </div>
-          </div>
           <Card className="w-full">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">Notifications sent</CardTitle>
-              <p className="text-xs text-muted-foreground">Log of all notifications you have sent.</p>
+            <CardHeader className="pb-3 flex flex-row items-center justify-between">
+              <div>
+                <CardTitle className="text-base">Notifications sent</CardTitle>
+                <p className="text-xs text-muted-foreground">Log of all notifications you have sent.</p>
+              </div>
+              <Button size="sm" onClick={() => { setShowSendForm(!showSendForm); setMsg({ text: "", ok: true }); }} variant={showSendForm ? "outline" : "default"}>
+                {showSendForm ? "Cancel" : "+ Send new message"}
+              </Button>
             </CardHeader>
             <CardContent className="w-full px-4 pb-4 pt-0 md:p-6">
+              {showSendForm && (
+                <div className="mb-6 p-4 border border-green-200 bg-green-50/20 dark:bg-green-950/20 dark:border-green-800 rounded-lg space-y-4 max-w-md">
+                  <div>
+                    <Label>Title</Label>
+                    <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Payment reminder" className="mt-1 w-full" />
+                  </div>
+                  <div>
+                    <Label>Message (optional)</Label>
+                    <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..." rows={4} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1" />
+                  </div>
+                  <div>
+                    <Label>Send to</Label>
+                    <Select value={targetAudience} onValueChange={(v: "owners" | "tenants" | "both") => setTargetAudience(v)}>
+                      <SelectTrigger className="mt-1 w-full"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="owners">Owners only</SelectItem>
+                        <SelectItem value="tenants">Tenants only</SelectItem>
+                        <SelectItem value="both">Owners and Tenants</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  {unitTypes.length > 0 && (
+                    <div>
+                      <Label>Filter by unit type (optional)</Label>
+                      <div className="flex flex-wrap gap-2 mt-2">
+                        {unitTypes.map(ut => (
+                          <button key={ut.id} type="button" onClick={() => toggleUnitType(ut.name)}
+                            className={`text-xs px-2 py-1 rounded-full border transition-colors ${selectedUnitTypes.includes(ut.name) ? "bg-primary text-primary-foreground border-primary" : "bg-muted/50 hover:bg-muted"}`}>
+                            {ut.name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2">
+                    <input type="checkbox" id="unpaid-cfg" checked={unpaidOnly} onChange={e => setUnpaidOnly(e.target.checked)} className="rounded" />
+                    <Label htmlFor="unpaid-cfg" className="cursor-pointer">Only users with unpaid bills</Label>
+                  </div>
+                  {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
+                  <div className="flex gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setShowSendForm(false)}>Cancel</Button>
+                    <Button onClick={send} disabled={sending}>{sending ? "Sending..." : "Send"}</Button>
+                  </div>
+                </div>
+              )}
               {logLoading ? (
                 <p className="text-sm text-muted-foreground py-4 px-4">Loading...</p>
               ) : (
@@ -1392,6 +1533,7 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Message</th>
                         <th className="px-4 py-3 text-left font-medium text-muted-foreground">Audience</th>
                         <th className="px-4 py-3 text-right font-medium text-muted-foreground">Recipients</th>
+                        <th className="px-4 py-3 text-right font-medium text-muted-foreground">Action</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -1402,9 +1544,12 @@ function NotificationsCfg({ unitTypes, onBack }: { unitTypes: UnitType[]; onBack
                           <td className="px-4 py-3 text-muted-foreground truncate max-w-[200px]" title={n.body ?? ""}>{n.body ?? "—"}</td>
                           <td className="px-4 py-3 capitalize">{n.target_audience}</td>
                           <td className="px-4 py-3 text-right font-medium">{n.recipients}</td>
+                          <td className="px-4 py-3 text-right">
+                            <Button size="sm" variant="ghost" className="h-7 text-xs text-red-600 hover:text-red-700 hover:bg-red-50" onClick={() => deleteNotification(n.id)}>Delete</Button>
+                          </td>
                         </tr>
                       ))}
-                      {sentLog.length === 0 && <tr><td colSpan={5} className="px-4 py-8 text-center text-muted-foreground">No notifications sent yet.</td></tr>}
+                      {sentLog.length === 0 && <tr><td colSpan={6} className="px-4 py-8 text-center text-muted-foreground">No notifications sent yet.</td></tr>}
                     </tbody>
                   </table>
                 </div>
@@ -1745,11 +1890,10 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
     e.preventDefault();
     const { data: inserted, error } = await sb.from("units").insert({ building_id:f.buildingId, unit_name:f.name, type:f.type, size_m2:f.size?parseFloat(f.size):null, entrance:f.entrance||null, floor:f.floor||null }).select("id").single();
     if (error) { setMsg({text:error.message,ok:false}); return; }
-    if (f.ownerId && f.ownerId !== "none" && inserted?.id) {
-      await sb.from("unit_owners").insert({ unit_id: inserted.id, owner_id: f.ownerId });
-    }
-    if (f.tenantId && f.tenantId !== "none" && inserted?.id) {
-      await sb.from("unit_tenant_assignments").upsert({ unit_id: inserted.id, tenant_id: f.tenantId, is_payment_responsible: true });
+    if (inserted?.id && (f.ownerId && f.ownerId !== "none" || f.tenantId && f.tenantId !== "none")) {
+      const res = await fetch("/api/manager/assign-unit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unitId: inserted.id, ownerId: f.ownerId && f.ownerId !== "none" ? f.ownerId : null, tenantId: f.tenantId && f.tenantId !== "none" ? f.tenantId : null }) });
+      const j = await res.json();
+      if (!res.ok) { setMsg({ text: j.error || "Failed to assign owner/tenant", ok: false }); return; }
     }
     setMsg({text:"Unit created.",ok:true}); setF({buildingId:"",name:"",type:"",size:"",entrance:"",floor:"",ownerId:"none",tenantId:"none"}); setShowCreate(false); reload();
   }
@@ -1758,14 +1902,9 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
     if (!editingUnit) return;
     const { error } = await sb.from("units").update({ building_id:editF.buildingId, unit_name:editF.name, type:editF.type, size_m2:editF.size?parseFloat(editF.size):null, entrance:editF.entrance||null, floor:editF.floor||null }).eq("id", editingUnit.id);
     if (error) { setMsg({text:error.message,ok:false}); return; }
-    await sb.from("unit_owners").delete().eq("unit_id", editingUnit.id);
-    if (editF.ownerId && editF.ownerId !== "none") {
-      await sb.from("unit_owners").insert({ unit_id: editingUnit.id, owner_id: editF.ownerId });
-    }
-    await sb.from("unit_tenant_assignments").delete().eq("unit_id", editingUnit.id);
-    if (editF.tenantId && editF.tenantId !== "none") {
-      await sb.from("unit_tenant_assignments").insert({ unit_id: editingUnit.id, tenant_id: editF.tenantId, is_payment_responsible: true });
-    }
+    const res = await fetch("/api/manager/assign-unit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unitId: editingUnit.id, ownerId: editF.ownerId && editF.ownerId !== "none" ? editF.ownerId : null, tenantId: editF.tenantId && editF.tenantId !== "none" ? editF.tenantId : null }) });
+    const j = await res.json();
+    if (!res.ok) { setMsg({ text: j.error || "Failed to assign owner/tenant", ok: false }); return; }
     setMsg({text:"Unit updated.",ok:true}); setEditingUnit(null); reload();
   }
 
@@ -2078,25 +2217,26 @@ function ServicesCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editF, setEditF] = useState({name:"", unitType:"", category:"", pricing:"fixed_per_unit", price:"", freq:"recurrent"});
 
-  const sb = createClient();
-
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("services").insert({ name:f.name, unit_type:f.unitType, category:f.category||null, pricing_model:f.pricing, price_value:parseFloat(f.price)||0, frequency:f.freq });
-    if (!error) { setMsg({text:"Service created.",ok:true}); setF({name:"",unitType:"",category:"",pricing:"fixed_per_unit",price:"",freq:"recurrent"}); setShowCreate(false); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch("/api/manager/services", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: f.name, unit_type: f.unitType, category: f.category || null, pricing_model: f.pricing, price_value: parseFloat(f.price) || 0, frequency: f.freq }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && !j.error) { setMsg({ text: "Service created.", ok: true }); setF({ name: "", unitType: "", category: "", pricing: "fixed_per_unit", price: "", freq: "recurrent" }); setShowCreate(false); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   async function save(id: string) {
-    const { error } = await sb.from("services").update({ name:editF.name, unit_type:editF.unitType, category:editF.category||null, pricing_model:editF.pricing, price_value:parseFloat(editF.price)||0, frequency:editF.freq }).eq("id", id);
-    if (!error) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch("/api/manager/services", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: editF.name, unit_type: editF.unitType, category: editF.category || null, pricing_model: editF.pricing, price_value: parseFloat(editF.price) || 0, frequency: editF.freq }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && !j.error) { setMsg({ text: "Updated.", ok: true }); setEditingId(null); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   async function del(id: string) {
-    const { error } = await sb.from("services").delete().eq("id", id);
-    if (!error) { setMsg({text:"Deleted.",ok:true}); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch(`/api/manager/services?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.success) { setMsg({ text: "Deleted.", ok: true }); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   const pricingLabel = (m: string) => m === "per_m2" ? "Per m²" : "Fixed/unit";
@@ -2244,25 +2384,26 @@ function ExpensesCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editF, setEditF] = useState({title:"", category:"", vendor:"", amount:"", freq:"recurrent"});
 
-  const sb = createClient();
-
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("expenses").insert({ title:f.title, category:f.category, vendor:f.vendor, amount:parseFloat(f.amount)||0, frequency:f.freq });
-    if (!error) { setMsg({text:"Expense created.",ok:true}); setF({title:"",category:"",vendor:"",amount:"",freq:"recurrent"}); setShowCreate(false); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch("/api/manager/expenses", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ title: f.title, category: f.category, vendor: f.vendor, amount: parseFloat(f.amount) || 0, frequency: f.freq }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && !j.error) { setMsg({ text: "Expense created.", ok: true }); setF({ title: "", category: "", vendor: "", amount: "", freq: "recurrent" }); setShowCreate(false); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   async function save(id: string) {
-    const { error } = await sb.from("expenses").update({ title:editF.title, category:editF.category, vendor:editF.vendor, amount:parseFloat(editF.amount)||0, frequency:editF.freq }).eq("id", id);
-    if (!error) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch("/api/manager/expenses", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, title: editF.title, category: editF.category, vendor: editF.vendor, amount: parseFloat(editF.amount) || 0, frequency: editF.freq }) });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && !j.error) { setMsg({ text: "Updated.", ok: true }); setEditingId(null); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   async function del(id: string) {
-    const { error } = await sb.from("expenses").delete().eq("id", id);
-    if (!error) { setMsg({text:"Deleted.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const res = await fetch(`/api/manager/expenses?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const j = await res.json().catch(() => ({}));
+    if (res.ok && j.success) { setMsg({ text: "Deleted.", ok: true }); setEditingId(null); reload(); }
+    else setMsg({ text: j.error || "Failed", ok: false });
   }
 
   const templates = data.expenses.filter(e => e.template_id == null && e.period_month == null);
@@ -2398,30 +2539,32 @@ function VendorsCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editName, setEditName] = useState("");
-  const sb = createClient();
 
   const expenseCountMap = new Map<string,number>();
   data.expenses.forEach(e => expenseCountMap.set(e.vendor, (expenseCountMap.get(e.vendor) ?? 0) + 1));
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("vendors").insert({ name: newName });
-    if (!error) { setMsg({text:"Vendor created.",ok:true}); setNewName(""); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/vendors", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Vendor created.",ok:true}); setNewName(""); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   async function save(id: string) {
-    const { error } = await sb.from("vendors").update({ name: editName }).eq("id", id);
-    if (!error) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/vendors", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: editName }) });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   async function del(id: string, name: string) {
     const count = expenseCountMap.get(name) ?? 0;
     if (count > 0) { setMsg({text:`Cannot delete — used in ${count} expense${count!==1?"s":""}.`,ok:false}); return; }
-    const { error } = await sb.from("vendors").delete().eq("id", id);
-    if (!error) { setMsg({text:"Deleted.",ok:true}); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch(`/api/manager/vendors?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Deleted.",ok:true}); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   return (
@@ -2497,7 +2640,6 @@ function CategoriesCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [msg, setMsg] = useState<{text:string;ok:boolean}>({text:"",ok:true});
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editName, setEditName] = useState("");
-  const sb = createClient();
 
   // Count usages per category
   const expUsage = new Map<string,number>();
@@ -2507,23 +2649,26 @@ function CategoriesCfg({ data, reload }: { data: Data; reload: () => void }) {
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("service_categories").insert({ name: newName });
-    if (!error) { setMsg({text:"Category created.",ok:true}); setNewName(""); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/service-categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Category created.",ok:true}); setNewName(""); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   async function save(id: string) {
-    const { error } = await sb.from("service_categories").update({ name: editName }).eq("id", id);
-    if (!error) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/service-categories", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: editName }) });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   async function del(id: string, name: string) {
     const total = (expUsage.get(name) ?? 0) + (svcUsage.get(name) ?? 0);
     if (total > 0) { setMsg({text:`Cannot delete — used in ${total} item${total!==1?"s":""}.`,ok:false}); return; }
-    const { error } = await sb.from("service_categories").delete().eq("id", id);
-    if (!error) { setMsg({text:"Deleted.",ok:true}); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch(`/api/manager/service-categories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const j = await r.json();
+    if (r.ok) { setMsg({text:"Deleted.",ok:true}); reload(); }
+    else setMsg({text:j.error??r.statusText,ok:false});
   }
 
   return (
@@ -2622,17 +2767,22 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
 
   // Build maps for quick lookup
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
+  const tenantMap = new Map(data.unitTenantAssignments.map(a => [a.unit_id, a.tenant_id]));
   const profileUnitsMap = new Map<string, string[]>();
   data.unitOwners.forEach(uo => {
     const existing = profileUnitsMap.get(uo.owner_id) ?? [];
     profileUnitsMap.set(uo.owner_id, [...existing, uo.unit_id]);
+  });
+  data.unitTenantAssignments.forEach(a => {
+    const existing = profileUnitsMap.get(a.tenant_id) ?? [];
+    profileUnitsMap.set(a.tenant_id, [...existing, a.unit_id]);
   });
   const unitNameMap = new Map(data.units.map(u => [u.id, u.unit_name]));
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
     try {
-      const res = await fetch("/api/users/create", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(f) });
+      const res = await fetch("/api/manager/users/create", { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(f) });
       const r = await res.json();
       if(r.success){ setMsg({text:"User created successfully.",ok:true}); setF({name:"",surname:"",email:"",password:"",phone:"",role:"owner"}); setShowCreate(false); reload(); }
       else setMsg({text:r.error??"Failed",ok:false});
@@ -2664,13 +2814,25 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
   }
 
   async function assignUnit(profileId: string, unitId: string) {
-    await createClient().from("unit_owners").upsert({unit_id:unitId, owner_id:profileId});
-    setAssigningUnit(null); setSelectedUnit(""); reload();
+    if (!editingUser) return;
+    const isOwner = editingUser.role === "owner";
+    const res = await fetch("/api/manager/assign-unit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      unitId, ownerId: isOwner ? profileId : (ownerMap.get(unitId) ?? null), tenantId: isOwner ? (tenantMap.get(unitId) ?? null) : profileId
+    }) });
+    const j = await res.json();
+    if (res.ok && j.success) { setAssigningUnit(null); setSelectedUnit(""); reload(); }
+    else setMsg({ text: j.error ?? "Failed to assign", ok: false });
   }
 
   async function removeUnit(unitId: string) {
-    await createClient().from("unit_owners").delete().eq("unit_id", unitId);
-    reload();
+    if (!editingUser) return;
+    const isOwner = ownerMap.get(unitId) === editingUser.id;
+    const res = await fetch("/api/manager/assign-unit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({
+      unitId, ownerId: isOwner ? null : (ownerMap.get(unitId) ?? null), tenantId: isOwner ? (tenantMap.get(unitId) ?? null) : null
+    }) });
+    const j = await res.json();
+    if (res.ok && j.success) reload();
+    else setMsg({ text: j.error ?? "Failed to remove", ok: false });
   }
 
   async function uploadAvatar(profileId: string, file: File) {
@@ -2826,7 +2988,7 @@ function UsersCfg({ data, reload }: { data: Data; reload: () => void }) {
                         <div className="flex gap-2">
                           <Select value={selectedUnit} onValueChange={setSelectedUnit}>
                             <SelectTrigger className="h-8 flex-1"><SelectValue placeholder="Select unit"/></SelectTrigger>
-                            <SelectContent>{data.units.filter(u => !ownerMap.has(u.id) || ownerMap.get(u.id) === editingUser.id).map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+                            <SelectContent>{data.units.filter(u => (editingUser.role === "owner" ? !ownerMap.has(u.id) || ownerMap.get(u.id) === editingUser.id : !tenantMap.has(u.id) || tenantMap.get(u.id) === editingUser.id)).map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
                           </Select>
                           <Button size="sm" className="h-8" onClick={() => selectedUnit && assignUnit(editingUser.id, selectedUnit)} disabled={!selectedUnit}>Assign</Button>
                           <Button size="sm" variant="ghost" className="h-8" onClick={() => { setAssigningUnit(null); setSelectedUnit(""); }}>✕</Button>

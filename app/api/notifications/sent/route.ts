@@ -57,3 +57,34 @@ export async function GET() {
     return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request) {
+  try {
+    const sb = await createServerClient();
+    const { data: { user } } = await sb.auth.getUser();
+    if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+
+    const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
+    if (profile?.role !== "manager") return NextResponse.json({ error: "Managers only" }, { status: 403 });
+
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get("id");
+    if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
+
+    const admin = adminClient();
+    const { data: existing, error: fetchErr } = await admin
+      .from("notifications")
+      .select("id, created_by")
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
+    if ((existing as { created_by: string }).created_by !== user.id) return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+
+    const { error: delErr } = await admin.from("notifications").delete().eq("id", id);
+    if (delErr) return NextResponse.json({ error: delErr.message }, { status: 500 });
+    return NextResponse.json({ success: true });
+  } catch (e) {
+    return NextResponse.json({ error: e instanceof Error ? e.message : "Unknown error" }, { status: 500 });
+  }
+}

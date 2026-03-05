@@ -1,6 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+
+export const maxDuration = 60;
 import PDFDocument from "pdfkit";
 import path from "path";
 import fs from "fs";
@@ -14,6 +16,8 @@ function adminClient() {
 }
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+type InvoiceSite = { id?: string; name?: string; address?: string; vat_account?: string; bank_name?: string; iban?: string; swift_code?: string; tax_amount?: number | null; manager_id?: string } | null;
 
 export async function GET(request: Request) {
   try {
@@ -32,7 +36,7 @@ export async function GET(request: Request) {
     const admin = adminClient();
 
     let bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; paid_at: string | null; reference_code?: string }[];
-    let site: { id?: string; name?: string; address?: string; vat_account?: string; bank_name?: string; iban?: string; swift_code?: string; tax_amount?: number | null; manager_id?: string } | null = null;
+    let site: InvoiceSite = null;
     let ownerProfile: { name?: string; surname?: string; email?: string } | null = null;
     let billToName = "Owner";
     let billToRole: "Owner" | "Tenant" = "Owner";
@@ -81,7 +85,7 @@ export async function GET(request: Request) {
       if (firstSiteId) {
         const minimalRes = await admin.from("sites").select("id, name, address, manager_id").eq("id", firstSiteId).single();
         const fullRes = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", firstSiteId).single();
-        site = (fullRes.error ? minimalRes : fullRes).data as typeof site;
+        site = (fullRes.error ? minimalRes : fullRes).data as InvoiceSite;
       }
     } else {
       const { data: bill, error: billErr } = await admin.from("bills")
@@ -98,7 +102,7 @@ export async function GET(request: Request) {
         const sid = (building as { site_id: string }).site_id;
         const fullRes = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", sid).single();
         const minimalRes = await admin.from("sites").select("id, name, address, manager_id").eq("id", sid).single();
-        site = (fullRes.error ? minimalRes : fullRes).data as typeof site;
+        site = (fullRes.error ? minimalRes : fullRes).data as InvoiceSite;
         buildingMap.set((building as { id: string }).id, (building as { name: string }).name ?? "");
       }
       ownerProfile = (await admin.from("profiles").select("name, surname, email").eq("id", user.id).single()).data;

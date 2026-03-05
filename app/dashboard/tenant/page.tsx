@@ -73,48 +73,28 @@ export default function TenantPage() {
     const { data: { user } } = await sb.auth.getUser();
     if (!user) { router.push("/login"); return; }
 
-    const [profileRes, tenantAssignmentsRes] = await Promise.all([
-      sb.from("profiles").select("id, name, surname, email, role, phone").eq("id", user.id).single(),
-      sb.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id),
-    ]);
-    let profile = profileRes.data;
+    const res = await fetch("/api/tenant/data", { cache: "no-store" });
+    if (!res.ok) {
+      if (res.status === 401) router.push("/login");
+      setLoading(false);
+      return;
+    }
+    const json = await res.json().catch(() => ({}));
+    let profile = json.profile ?? null;
     if (!profile) {
       const apiRes = await fetch("/api/profile");
       if (apiRes.ok) profile = (await apiRes.json()) as typeof profile;
     }
-    const unitIds = (tenantAssignmentsRes.data ?? []).map(u => u.unit_id);
-    if (!unitIds.length) {
-      const allUnits = (await sb.from("units").select("id, unit_name")).data ?? [];
-      setData({ profile, siteNames: [], units: [], allUnits, buildings: [], bills: [], expenses: [], unitTenantAssignments: [] });
-      setLoading(false);
-      return;
-    }
-
-    const unitIdSet = new Set(unitIds);
-    const [unitsRes, allUnitsRes, buildingsRes, billsRes, expensesRes, assignmentsRes] = await Promise.all([
-      sb.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
-      sb.from("units").select("id, unit_name"),
-      sb.from("buildings").select("id, name, site_id"),
-      sb.rpc("get_my_bills", { lim: 200 }),
-      sb.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
-      sb.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds),
-    ]);
-    const rawBills = (billsRes.data ?? []) as { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null }[];
-    const assignments = (assignmentsRes.data ?? []) as { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
-    const unitPayerMap = new Map<string, string>();
-    assignments.forEach(a => {
-      if (!unitPayerMap.has(a.unit_id) && a.is_payment_responsible !== false) unitPayerMap.set(a.unit_id, a.tenant_id);
-      else if (a.is_payment_responsible === true) unitPayerMap.set(a.unit_id, a.tenant_id);
+    setData({
+      profile,
+      siteNames: json.siteNames ?? [],
+      units: json.units ?? [],
+      allUnits: json.allUnits ?? [],
+      buildings: json.buildings ?? [],
+      bills: json.bills ?? [],
+      expenses: json.expenses ?? [],
+      unitTenantAssignments: json.unitTenantAssignments ?? [],
     });
-    const myPayingUnitIds = new Set(unitIds.filter((uid: string) => unitPayerMap.get(uid) === user.id));
-    const allBills = rawBills.filter(b => myPayingUnitIds.has(b.unit_id));
-    const units = (unitsRes.data ?? []) as { id: string; unit_name: string; building_id: string }[];
-    const buildings = (buildingsRes.data ?? []) as { id: string; name: string; site_id?: string | null }[];
-    const buildingIds = new Set(units.map(u => u.building_id));
-    const siteIds = [...new Set(buildings.filter(b => buildingIds.has(b.id) && b.site_id).map(b => b.site_id!))];
-    const sitesData = siteIds.length ? (await sb.from("sites").select("id, name").in("id", siteIds)).data ?? [] : [];
-    const siteNames = (sitesData as { name: string }[]).map(s => s.name);
-    setData({ profile, siteNames, units: unitsRes.data ?? [], allUnits: allUnitsRes.data ?? [], buildings: buildingsRes.data ?? [], bills: allBills, expenses: expensesRes.data ?? [], unitTenantAssignments: assignments });
     setLoading(false);
   };
 
@@ -244,7 +224,7 @@ export default function TenantPage() {
               <div className="p-3 space-y-2">
                 <p className="font-semibold">{profile?.name} {profile?.surname}</p>
                 <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
-                {data.siteNames.length > 0 && <p className="text-sm text-muted-foreground">Site: {data.siteNames.join(", ")}</p>}
+                <p className="text-sm text-muted-foreground">Site: {data.siteNames?.length ? data.siteNames.join(", ") : "—"}</p>
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
@@ -481,16 +461,16 @@ export default function TenantPage() {
                             </td>
                             <td className="py-3">
                               {isFirstInPeriod ? (
-                                anyReceipt ? (
-                                  <div className="flex flex-col gap-0.5">
-                                    <span className="text-xs text-muted-foreground">Slip uploaded</span>
+                                <div className="flex flex-col gap-1">
+                                  {anyReceipt && (
                                     <a href={`/api/receipt?billId=${bills[0].id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
-                                  </div>
-                                ) : (
-                                  <Button size="sm" variant="outline" className="h-7 text-xs" disabled={!!uploadingFor} onClick={() => triggerFileInput({ periodMonth: b.period_month, periodYear: b.period_year })}>
-                                    {uploadingFor === uploadKey ? "Uploading..." : <><Camera className="size-3 mr-1" /> Upload slip</>}
-                                  </Button>
-                                )
+                                  )}
+                                  {!b.paid_at && (
+                                    <Button size="sm" variant="outline" className="h-7 text-xs w-fit" disabled={!!uploadingFor} onClick={() => triggerFileInput({ periodMonth: b.period_month, periodYear: b.period_year })}>
+                                      {uploadingFor === uploadKey ? "Uploading..." : <><Camera className="size-3 mr-1" /> {anyReceipt ? "Upload new slip" : "Upload slip"}</>}
+                                    </Button>
+                                  )}
+                                </div>
                               ) : "—"}
                             </td>
                           </tr>

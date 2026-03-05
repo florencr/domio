@@ -51,7 +51,7 @@ export async function POST(request: Request) {
       }
       if (!unitIds.length) return NextResponse.json({ error: "No bills for this period" }, { status: 403 });
       const { data: urlData } = admin.storage.from("payment-slips").getPublicUrl(receipt_path);
-      const update = { receipt_url: urlData.publicUrl, receipt_filename: receipt_filename ?? receipt_path, receipt_path, paid_at: new Date().toISOString(), status: "paid" };
+      const update = { receipt_url: urlData.publicUrl, receipt_filename: receipt_filename ?? receipt_path, receipt_path, status: "in_process" };
       const { error: upErr } = await admin.from("bills").update(update).in("unit_id", unitIds).eq("period_month", periodMonth).eq("period_year", periodYear);
       if (upErr) return NextResponse.json({ error: upErr.message }, { status: 500 });
       return NextResponse.json({ ok: true });
