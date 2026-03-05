@@ -3,15 +3,15 @@
 import { useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 
-export default function EditManagerPage() {
+export default function EditBuildingPage() {
   const router = useRouter();
   const params = useParams();
-  const managerId = params?.id as string;
+  const buildingId = params?.id as string;
 
   useEffect(() => {
-    if (managerId) router.replace(`/dashboard/admin?tab=managers&edit=${managerId}`);
+    if (buildingId) router.replace(`/dashboard/admin?tab=buildings&edit=${buildingId}`);
     else router.replace("/dashboard/admin");
-  }, [managerId, router]);
+  }, [buildingId, router]);
 
   return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Redirecting...</p></div>;
 }

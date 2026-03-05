@@ -12,7 +12,13 @@ export function DashboardRouter() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) { router.push("/login"); return; }
-      const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+      let profile: { role?: string } | null = null;
+      const apiRes = await fetch("/api/profile");
+      if (apiRes.ok) profile = await apiRes.json();
+      if (!profile) {
+        const res = await supabase.from("profiles").select("role").eq("id", user.id).single();
+        profile = res.data;
+      }
       if (profile?.role === "admin") router.push("/dashboard/admin");
       else if (profile?.role === "manager") router.push("/dashboard/manager");
       else if (profile?.role === "tenant") router.push("/dashboard/tenant");

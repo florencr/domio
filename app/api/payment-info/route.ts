@@ -61,7 +61,9 @@ export async function GET() {
       });
     }
 
-    const { data: site } = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, manager_id").eq("id", siteIds[0]).single();
+    const fullSite = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, manager_id").eq("id", siteIds[0]).single();
+    const minimalSite = await admin.from("sites").select("id, name, address, manager_id").eq("id", siteIds[0]).single();
+    const site = (fullSite.error ? minimalSite : fullSite).data;
     if (!site) {
       return NextResponse.json({
         site_name: null,

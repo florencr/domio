@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -15,12 +15,13 @@ import { ThemeToggle } from "@/components/ThemeToggle";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type Site = { id: string; name: string; address?: string; manager_id: string; created_at: string };
+type Site = { id: string; name: string; address?: string; manager_id: string; created_at?: string; vat_account?: string | null; bank_name?: string | null; iban?: string | null; swift_code?: string | null; tax_amount?: number | null };
 type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null };
-type Building = { id: string; name: string; site_id: string | null };
+type Building = { id: string; name: string; address?: string; site_id: string | null };
 
 export default function AdminPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [profile, setProfile] = useState<Profile | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [managers, setManagers] = useState<Profile[]>([]);
@@ -32,9 +33,15 @@ export default function AdminPage() {
   const [showCreateManager, setShowCreateManager] = useState(false);
   const [showCreateSite, setShowCreateSite] = useState(false);
   const [showCreateBuilding, setShowCreateBuilding] = useState(false);
-  const [managerForm, setManagerForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", siteName: "", siteAddress: "" });
-  const [siteForm, setSiteForm] = useState({ managerId: "", name: "", address: "" });
+  const [managerForm, setManagerForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+  const [siteForm, setSiteForm] = useState({ managerId: "", name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
   const [buildingForm, setBuildingForm] = useState({ siteId: "", name: "" });
+  const [editingManagerId, setEditingManagerId] = useState<string | null>(null);
+  const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
+  const [editingBuildingId, setEditingBuildingId] = useState<string | null>(null);
+  const [managerEditForm, setManagerEditForm] = useState({ name: "", surname: "", email: "", phone: "", password: "" });
+  const [siteEditForm, setSiteEditForm] = useState({ name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
+  const [buildingEditForm, setBuildingEditForm] = useState({ name: "" });
 
   const load = async () => {
     const sb = createClient();
@@ -43,22 +50,64 @@ export default function AdminPage() {
 
     const [profileRes, managersRes, buildingsRes, sitesRes] = await Promise.all([
       sb.from("profiles").select("id,name,surname,email,role,phone").eq("id", user.id).single(),
-      sb.from("profiles").select("id,name,surname,email,role,phone").eq("role", "manager"),
-      sb.from("buildings").select("id,name,site_id"),
+      fetch("/api/admin/managers").then(r => r.ok ? r.json() : []),
+      fetch("/api/admin/buildings").then(r => r.ok ? r.json() : []),
       fetch("/api/admin/sites").then(r => r.ok ? r.json() : []),
     ]);
 
-    const p = profileRes.data as Profile | null;
+    let p = profileRes.data as Profile | null;
+    if (!p) {
+      const apiRes = await fetch("/api/profile");
+      if (apiRes.ok) p = (await apiRes.json()) as Profile;
+    }
     if (p?.role !== "admin") { router.push("/dashboard"); return; }
 
     setProfile(p);
     setSites((sitesRes ?? []) as Site[]);
-    setManagers((managersRes.data ?? []) as Profile[]);
-    setBuildings((buildingsRes.data ?? []) as Building[]);
+    setManagers((managersRes ?? []) as Profile[]);
+    setBuildings((buildingsRes ?? []) as Building[]);
     setLoading(false);
   };
 
   useEffect(() => { load(); }, [router]);
+
+  useEffect(() => {
+    if (loading) return;
+    const tabParam = searchParams.get("tab");
+    const editParam = searchParams.get("edit");
+    if (tabParam === "managers" && editParam) {
+      setTab("managers");
+      const m = managers.find(x => x.id === editParam);
+      if (m) {
+        setEditingManagerId(editParam);
+        setManagerEditForm({ name: m.name, surname: m.surname, email: m.email, phone: m.phone || "", password: "" });
+      }
+      router.replace("/dashboard/admin?tab=managers", { scroll: false });
+    } else if (tabParam === "sites" && editParam) {
+      setTab("sites");
+      const s = sites.find(x => x.id === editParam);
+      if (s) {
+        setEditingSiteId(editParam);
+        setSiteEditForm({ name: s.name, address: s.address || "", vat_account: s.vat_account || "", bank_name: s.bank_name || "", iban: s.iban || "", swift_code: s.swift_code || "", tax_amount: s.tax_amount != null ? String(s.tax_amount) : "" });
+      }
+      router.replace("/dashboard/admin?tab=sites", { scroll: false });
+    } else if (tabParam === "buildings" && editParam) {
+      setTab("buildings");
+      const b = buildings.find(x => x.id === editParam);
+      if (b) {
+        setEditingBuildingId(editParam);
+        setBuildingEditForm({ name: b.name });
+      }
+      router.replace("/dashboard/admin?tab=buildings", { scroll: false });
+    } else if (tabParam && ["overview", "managers", "sites", "buildings", "audit", "maintenance"].includes(tabParam)) {
+      setTab(tabParam);
+    }
+  }, [loading, searchParams, managers, sites, buildings, router]);
+
+  function setTabWithUrl(value: string) {
+    setTab(value);
+    router.replace(`/dashboard/admin?tab=${value}`, { scroll: false });
+  }
 
   async function createManager(e: React.FormEvent) {
     e.preventDefault();
@@ -66,12 +115,21 @@ export default function AdminPage() {
     const res = await fetch("/api/admin/create-manager", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...managerForm, siteName: managerForm.siteName || undefined, siteAddress: managerForm.siteAddress || undefined }),
+      body: JSON.stringify({
+        ...managerForm,
+        siteName: managerForm.siteName || undefined,
+        siteAddress: managerForm.siteAddress || undefined,
+        vat_account: managerForm.vat_account || undefined,
+        tax_amount: managerForm.tax_amount ? parseFloat(managerForm.tax_amount) : undefined,
+        bank_name: managerForm.bank_name || undefined,
+        iban: managerForm.iban || undefined,
+        swift_code: managerForm.swift_code || undefined,
+      }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
       setMsg({ text: "Manager created.", ok: true });
-      setManagerForm({ name: "", surname: "", email: "", password: "", phone: "", siteName: "", siteAddress: "" });
+      setManagerForm({ name: "", surname: "", email: "", password: "", phone: "", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
       setShowCreateManager(false);
       load();
     } else {
@@ -85,13 +143,87 @@ export default function AdminPage() {
     const res = await fetch("/api/admin/sites", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ manager_id: siteForm.managerId, name: siteForm.name, address: siteForm.address }),
+      body: JSON.stringify({
+        manager_id: siteForm.managerId,
+        name: siteForm.name,
+        address: siteForm.address,
+        vat_account: siteForm.vat_account || null,
+        bank_name: siteForm.bank_name || null,
+        iban: siteForm.iban || null,
+        swift_code: siteForm.swift_code || null,
+        tax_amount: siteForm.tax_amount ? parseFloat(siteForm.tax_amount) : null,
+      }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
       setMsg({ text: "Site created.", ok: true });
-      setSiteForm({ managerId: "", name: "", address: "" });
+      setSiteForm({ managerId: "", name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
       setShowCreateSite(false);
+      load();
+    } else {
+      setMsg({ text: json.error || "Failed", ok: false });
+    }
+  }
+
+  async function updateManager(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingManagerId) return;
+    setMsg({ text: "", ok: true });
+    const res = await fetch(`/api/admin/managers/${editingManagerId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...managerEditForm, password: managerEditForm.password || undefined }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      setMsg({ text: "Manager updated.", ok: true });
+      setEditingManagerId(null);
+      load();
+    } else {
+      setMsg({ text: json.error || "Failed", ok: false });
+    }
+  }
+
+  async function updateSite(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingSiteId) return;
+    setMsg({ text: "", ok: true });
+    const res = await fetch(`/api/admin/sites/${editingSiteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        name: siteEditForm.name,
+        address: siteEditForm.address,
+        vat_account: siteEditForm.vat_account || null,
+        bank_name: siteEditForm.bank_name || null,
+        iban: siteEditForm.iban || null,
+        swift_code: siteEditForm.swift_code || null,
+        tax_amount: siteEditForm.tax_amount ? parseFloat(siteEditForm.tax_amount) : null,
+      }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      setMsg({ text: "Site updated.", ok: true });
+      setEditingSiteId(null);
+      load();
+    } else {
+      setMsg({ text: json.error || "Failed", ok: false });
+    }
+  }
+
+  async function updateBuilding(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingBuildingId) return;
+    setMsg({ text: "", ok: true });
+    const res = await fetch(`/api/admin/buildings/${editingBuildingId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: buildingEditForm.name }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      setMsg({ text: "Building updated.", ok: true });
+      setEditingBuildingId(null);
       load();
     } else {
       setMsg({ text: json.error || "Failed", ok: false });
@@ -185,10 +317,12 @@ export default function AdminPage() {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end" className="w-64">
-              <div className="p-3">
+              <div className="p-3 space-y-2">
                 <p className="font-semibold">{profile?.name} {profile?.surname}</p>
                 <p className="text-sm text-muted-foreground">Role: Admin</p>
+                <p className="text-sm text-muted-foreground">Site: All</p>
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -196,7 +330,7 @@ export default function AdminPage() {
         </div>
       </header>
 
-      <Tabs value={tab} onValueChange={setTab} className="space-y-4">
+      <Tabs value={tab} onValueChange={setTabWithUrl} className="space-y-4">
         <TabsList className="grid w-full grid-cols-6 max-w-3xl">
           <TabsTrigger value="overview" className="flex items-center gap-2">
             <LayoutGrid className="size-4" />Overview
@@ -263,7 +397,7 @@ export default function AdminPage() {
                           ) : "—"}
                         </td>
                         <td className="py-3">
-                          {m && <Link href={`/dashboard/admin/managers/${s.manager_id}`}><Button variant="ghost" size="icon"><Pencil className="size-4" /></Button></Link>}
+                          <Button variant="ghost" size="icon" onClick={() => { setTabWithUrl("sites"); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "", vat_account: s.vat_account || "", bank_name: s.bank_name || "", iban: s.iban || "", swift_code: s.swift_code || "", tax_amount: s.tax_amount != null ? String(s.tax_amount) : "" }); }} title="Edit site"><Pencil className="size-4" /></Button>
                         </td>
                       </tr>
                     );
@@ -274,7 +408,7 @@ export default function AdminPage() {
                       <td className="py-3">—</td>
                       <td className="py-3">{m.name} {m.surname}</td>
                       <td className="py-3">—</td>
-                      <td className="py-3"><Link href={`/dashboard/admin/managers/${m.id}`}><Button variant="ghost" size="icon"><Pencil className="size-4" /></Button></Link></td>
+                      <td className="py-3"><Button variant="ghost" size="icon" onClick={() => { setTabWithUrl("managers"); setEditingManagerId(m.id); setManagerEditForm({ name: m.name, surname: m.surname, email: m.email, phone: m.phone || "", password: "" }); }} title="Edit manager"><Pencil className="size-4" /></Button></td>
                     </tr>
                   ))}
                 </tbody>
@@ -309,7 +443,7 @@ export default function AdminPage() {
                 <CardTitle>Managers</CardTitle>
                 <p className="text-sm text-muted-foreground">User profiles with manager role. Each can have one site.</p>
               </div>
-              <Button onClick={() => { setShowCreateManager(!showCreateManager); setShowCreateSite(false); setShowCreateBuilding(false); }} variant={showCreateManager ? "outline" : "default"}>
+              <Button onClick={() => { setShowCreateManager(!showCreateManager); setShowCreateSite(false); setShowCreateBuilding(false); setEditingManagerId(null); }} variant={showCreateManager ? "outline" : "default"}>
                 <Plus className="size-4 mr-1" />{showCreateManager ? "Cancel" : "Create Manager"}
               </Button>
             </CardHeader>
@@ -323,9 +457,31 @@ export default function AdminPage() {
                   <div><Label>Email</Label><Input type="email" value={managerForm.email} onChange={e => setManagerForm({ ...managerForm, email: e.target.value })} required /></div>
                   <div><Label>Password</Label><Input type="password" value={managerForm.password} onChange={e => setManagerForm({ ...managerForm, password: e.target.value })} required minLength={6} /></div>
                   <div><Label>Phone (optional)</Label><Input value={managerForm.phone} onChange={e => setManagerForm({ ...managerForm, phone: e.target.value })} /></div>
-                  <div><Label>Site name (optional)</Label><Input value={managerForm.siteName} onChange={e => setManagerForm({ ...managerForm, siteName: e.target.value })} placeholder="Auto-created with manager" /></div>
-                  <div><Label>Site address (optional)</Label><Input value={managerForm.siteAddress} onChange={e => setManagerForm({ ...managerForm, siteAddress: e.target.value })} /></div>
+                  <p className="text-sm font-medium mt-2">Site (auto-created)</p>
+                  <div><Label>Site name</Label><Input value={managerForm.siteName} onChange={e => setManagerForm({ ...managerForm, siteName: e.target.value })} placeholder="e.g. Building Complex A" /></div>
+                  <div><Label>Site address</Label><Input value={managerForm.siteAddress} onChange={e => setManagerForm({ ...managerForm, siteAddress: e.target.value })} placeholder="e.g. 123 Main St" /></div>
+                  <div><Label>VAT account</Label><Input value={managerForm.vat_account} onChange={e => setManagerForm({ ...managerForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
+                  <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={managerForm.tax_amount} onChange={e => setManagerForm({ ...managerForm, tax_amount: e.target.value })} placeholder="e.g. 20 for 20%" /></div>
+                  <div><Label>Bank name</Label><Input value={managerForm.bank_name} onChange={e => setManagerForm({ ...managerForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
+                  <div><Label>IBAN</Label><Input value={managerForm.iban} onChange={e => setManagerForm({ ...managerForm, iban: e.target.value })} placeholder="e.g. AL47 2121 1009 0000 0002 3569 8741" /></div>
+                  <div><Label>SWIFT code</Label><Input value={managerForm.swift_code} onChange={e => setManagerForm({ ...managerForm, swift_code: e.target.value })} placeholder="e.g. ALBAAFLA" /></div>
                   <Button type="submit">Create Manager</Button>
+                </form>
+              )}
+              {editingManagerId && (
+                <form onSubmit={updateManager} className="grid gap-3 p-4 border rounded-lg mb-4 bg-muted/30">
+                  <p className="text-sm font-medium">Edit manager</p>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div><Label>Name</Label><Input value={managerEditForm.name} onChange={e => setManagerEditForm({ ...managerEditForm, name: e.target.value })} required /></div>
+                    <div><Label>Surname</Label><Input value={managerEditForm.surname} onChange={e => setManagerEditForm({ ...managerEditForm, surname: e.target.value })} required /></div>
+                  </div>
+                  <div><Label>Email</Label><Input type="email" value={managerEditForm.email} onChange={e => setManagerEditForm({ ...managerEditForm, email: e.target.value })} required /></div>
+                  <div><Label>Phone</Label><Input value={managerEditForm.phone} onChange={e => setManagerEditForm({ ...managerEditForm, phone: e.target.value })} /></div>
+                  <div><Label>New password (optional)</Label><Input type="password" value={managerEditForm.password} onChange={e => setManagerEditForm({ ...managerEditForm, password: e.target.value })} placeholder="Leave blank to keep" /></div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Save</Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingManagerId(null)}>Cancel</Button>
+                  </div>
                 </form>
               )}
               <div className="space-y-2">
@@ -340,7 +496,7 @@ export default function AdminPage() {
                         {site && <p className="text-xs text-green-600 mt-1">Site: {site.name}</p>}
                         {!site && <p className="text-xs text-amber-600 mt-1">No site assigned</p>}
                       </div>
-                      <Link href={`/dashboard/admin/managers/${m.id}`}><Button variant="outline" size="sm"><Pencil className="size-4 mr-1" />Edit</Button></Link>
+                      <Button variant="outline" size="sm" onClick={() => { setShowCreateManager(false); setEditingManagerId(m.id); setManagerEditForm({ name: m.name, surname: m.surname, email: m.email, phone: m.phone || "", password: "" }); }}><Pencil className="size-4 mr-1" />Edit</Button>
                     </div>
                   );
                 })}
@@ -357,7 +513,7 @@ export default function AdminPage() {
                 <CardTitle>Sites</CardTitle>
                 <p className="text-sm text-muted-foreground">Property sites. Assign a manager when creating.</p>
               </div>
-              <Button onClick={() => { setShowCreateSite(!showCreateSite); setShowCreateManager(false); setShowCreateBuilding(false); }} variant={showCreateSite ? "outline" : "default"}>
+              <Button onClick={() => { setShowCreateSite(!showCreateSite); setShowCreateManager(false); setShowCreateBuilding(false); setEditingSiteId(null); }} variant={showCreateSite ? "outline" : "default"}>
                 <Plus className="size-4 mr-1" />{showCreateSite ? "Cancel" : "Create Site"}
               </Button>
             </CardHeader>
@@ -374,8 +530,29 @@ export default function AdminPage() {
                   </div>
                   <div><Label>Site name</Label><Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="e.g. Building Complex A" required /></div>
                   <div><Label>Address</Label><Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
+                  <div><Label>VAT account</Label><Input value={siteForm.vat_account} onChange={e => setSiteForm({ ...siteForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
+                  <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteForm.tax_amount} onChange={e => setSiteForm({ ...siteForm, tax_amount: e.target.value })} placeholder="e.g. 20" /></div>
+                  <div><Label>Bank name</Label><Input value={siteForm.bank_name} onChange={e => setSiteForm({ ...siteForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
+                  <div><Label>IBAN</Label><Input value={siteForm.iban} onChange={e => setSiteForm({ ...siteForm, iban: e.target.value })} placeholder="e.g. AL47 2121..." /></div>
+                  <div><Label>SWIFT code</Label><Input value={siteForm.swift_code} onChange={e => setSiteForm({ ...siteForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
                   <Button type="submit" disabled={!siteForm.managerId || !managersWithoutSite.length}>Create Site</Button>
                   {!managersWithoutSite.length && <p className="text-xs text-amber-600">All managers have sites. Create a new manager first.</p>}
+                </form>
+              )}
+              {editingSiteId && (
+                <form onSubmit={updateSite} className="grid gap-3 p-4 border rounded-lg mb-4 bg-muted/30">
+                  <p className="text-sm font-medium">Edit site</p>
+                  <div><Label>Site name</Label><Input value={siteEditForm.name} onChange={e => setSiteEditForm({ ...siteEditForm, name: e.target.value })} required /></div>
+                  <div><Label>Address</Label><Input value={siteEditForm.address} onChange={e => setSiteEditForm({ ...siteEditForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
+                  <div><Label>VAT account</Label><Input value={siteEditForm.vat_account} onChange={e => setSiteEditForm({ ...siteEditForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
+                  <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteEditForm.tax_amount} onChange={e => setSiteEditForm({ ...siteEditForm, tax_amount: e.target.value })} placeholder="e.g. 20" /></div>
+                  <div><Label>Bank name</Label><Input value={siteEditForm.bank_name} onChange={e => setSiteEditForm({ ...siteEditForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
+                  <div><Label>IBAN</Label><Input value={siteEditForm.iban} onChange={e => setSiteEditForm({ ...siteEditForm, iban: e.target.value })} placeholder="e.g. AL47 2121..." /></div>
+                  <div><Label>SWIFT code</Label><Input value={siteEditForm.swift_code} onChange={e => setSiteEditForm({ ...siteEditForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Save</Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingSiteId(null)}>Cancel</Button>
+                  </div>
                 </form>
               )}
               <div className="space-y-2">
@@ -390,7 +567,7 @@ export default function AdminPage() {
                         <p className="text-xs text-muted-foreground mt-1">Manager: {m ? `${m.name} ${m.surname}` : "—"}</p>
                         {siteBuildings.length > 0 && <p className="text-xs text-muted-foreground">Buildings: {siteBuildings.map(b => b.name).join(", ")}</p>}
                       </div>
-                      {m && <Link href={`/dashboard/admin/managers/${m.id}`}><Button variant="outline" size="sm"><Pencil className="size-4 mr-1" />Edit</Button></Link>}
+                      <Button variant="outline" size="sm" onClick={() => { setShowCreateSite(false); setTabWithUrl("sites"); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "", vat_account: s.vat_account || "", bank_name: s.bank_name || "", iban: s.iban || "", swift_code: s.swift_code || "", tax_amount: s.tax_amount != null ? String(s.tax_amount) : "" }); }}><Pencil className="size-4 mr-1" />Edit</Button>
                     </div>
                   );
                 })}
@@ -427,6 +604,16 @@ export default function AdminPage() {
                   <Button type="submit">Create Building</Button>
                 </form>
               )}
+              {editingBuildingId && (
+                <form onSubmit={updateBuilding} className="grid gap-3 p-4 border rounded-lg mb-4 bg-muted/30">
+                  <p className="text-sm font-medium">Edit building</p>
+                  <div><Label>Building name</Label><Input value={buildingEditForm.name} onChange={e => setBuildingEditForm({ ...buildingEditForm, name: e.target.value })} required /></div>
+                  <div className="flex gap-2">
+                    <Button type="submit">Save</Button>
+                    <Button type="button" variant="outline" onClick={() => setEditingBuildingId(null)}>Cancel</Button>
+                  </div>
+                </form>
+              )}
               <div className="space-y-2">
                 {buildings.map(b => {
                   const site = b.site_id ? siteMap.get(b.site_id) : null;
@@ -444,7 +631,7 @@ export default function AdminPage() {
                             {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                           </SelectContent>
                         </Select>
-                        <Link href={`/dashboard/admin/managers/${site?.manager_id}`}><Button variant="ghost" size="icon" disabled={!site}><Pencil className="size-4" /></Button></Link>
+                        <Button variant="outline" size="sm" onClick={() => { setShowCreateBuilding(false); setTabWithUrl("buildings"); setEditingBuildingId(b.id); setBuildingEditForm({ name: b.name }); }}><Pencil className="size-4 mr-1" />Edit</Button>
                       </div>
                     </div>
                   );
@@ -473,6 +660,7 @@ function MaintenanceTab({ load, sites }: { load: () => void; sites: Site[] }) {
   const [actionLoading, setActionLoading] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showClearExpensesConfirm, setShowClearExpensesConfirm] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
 
   useEffect(() => {
@@ -522,6 +710,25 @@ function MaintenanceTab({ load, sites }: { load: () => void; sites: Site[] }) {
     }
   }
 
+  async function clearExpenses() {
+    setShowClearExpensesConfirm(false);
+    if (!selectedSiteId) return;
+    setActionLoading(true); setMsg({ text: "", ok: true });
+    const res = await fetch("/api/admin/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clearExpenses", siteId: selectedSiteId }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setActionLoading(false);
+    if (res.ok && j.success) {
+      setMsg({ text: "Expenses cleared for site.", ok: true });
+      load();
+    } else {
+      setMsg({ text: j.error || "Failed", ok: false });
+    }
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -544,6 +751,32 @@ function MaintenanceTab({ load, sites }: { load: () => void; sites: Site[] }) {
               </Button>
             </div>
           )}
+        </div>
+
+        <div className="space-y-2 pt-4 border-t">
+          <p className="font-medium text-sm">Clear expense dummy data</p>
+          <p className="text-xs text-muted-foreground">Deletes only expenses for the selected site. Keeps bills, buildings, units, and users.</p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Select value={selectedSiteId || "__none__"} onValueChange={v => setSelectedSiteId(v === "__none__" ? "" : v)}>
+              <SelectTrigger className="w-[220px]">
+                <SelectValue placeholder="Choose site" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="__none__">— Choose site —</SelectItem>
+                {sites.map(s => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setShowClearExpensesConfirm(true)}
+              disabled={actionLoading || !selectedSiteId || sites.length === 0}
+            >
+              Clear expenses
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-2 pt-4 border-t">
@@ -571,6 +804,19 @@ function MaintenanceTab({ load, sites }: { load: () => void; sites: Site[] }) {
             </Button>
           </div>
         </div>
+
+        {showClearExpensesConfirm && selectedSiteId && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+            <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4">
+              <p className="font-semibold mb-2">Clear expenses for this site?</p>
+              <p className="text-sm text-muted-foreground mb-4">This will delete all expenses for the selected site. Bills, buildings, units, and users will be kept.</p>
+              <div className="flex gap-2 justify-end">
+                <Button variant="outline" onClick={() => setShowClearExpensesConfirm(false)}>Cancel</Button>
+                <Button variant="destructive" onClick={clearExpenses} disabled={actionLoading}>{actionLoading ? "Clearing..." : "Yes, clear expenses"}</Button>
+              </div>
+            </div>
+          </div>
+        )}
 
         {showClearConfirm && selectedSiteId && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">

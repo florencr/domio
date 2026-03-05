@@ -1,0 +1,17 @@
+-- Optional: Disable RLS on critical tables if app keeps loading due to RLS blocking.
+-- Run this in Supabase SQL Editor if the app hangs after enabling RLS.
+-- You can re-enable later once policies are fixed.
+
+ALTER TABLE profiles DISABLE ROW LEVEL SECURITY;
+ALTER TABLE unit_owners DISABLE ROW LEVEL SECURITY;
+ALTER TABLE unit_tenant_assignments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE buildings DISABLE ROW LEVEL SECURITY;
+ALTER TABLE units DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bills DISABLE ROW LEVEL SECURITY;
+ALTER TABLE bill_lines DISABLE ROW LEVEL SECURITY;
+ALTER TABLE expenses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE payments DISABLE ROW LEVEL SECURITY;
+ALTER TABLE services DISABLE ROW LEVEL SECURITY;
+ALTER TABLE service_categories DISABLE ROW LEVEL SECURITY;
+ALTER TABLE unit_types DISABLE ROW LEVEL SECURITY;
+ALTER TABLE vendors DISABLE ROW LEVEL SECURITY;

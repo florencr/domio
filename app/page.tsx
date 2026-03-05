@@ -7,6 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import Image from "next/image";
+import { Eye, EyeOff } from "lucide-react";
+import { OAuthButtons } from "@/components/OAuthButtons";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
 
@@ -16,6 +18,8 @@ export default function HomePage() {
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberMe, setRememberMe] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [loginLoading, setLoginLoading] = useState(false);
 
@@ -35,8 +39,19 @@ export default function HomePage() {
           return;
         }
         setUser(session.user);
-        const { data: profile } = await supabase.from("profiles").select("role").eq("id", session.user.id).single();
-        setRole(profile?.role ?? null);
+        let role: string | null = null;
+        try {
+          const apiRes = await fetch("/api/profile");
+          if (apiRes.ok) {
+            const p = await apiRes.json();
+            role = p?.role ?? null;
+          }
+        } catch {}
+        if (role == null) {
+          const { data: profile } = await supabase.from("profiles").select("role").eq("id", session.user.id).single();
+          role = profile?.role ?? null;
+        }
+        setRole(role);
         setLoading(false);
         done = true;
       })
@@ -56,7 +71,15 @@ export default function HomePage() {
       setLoginError(err.message);
       return;
     }
-    const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+    let profile: { role?: string } | null = null;
+    try {
+      const apiRes = await fetch("/api/profile");
+      if (apiRes.ok) profile = await apiRes.json();
+    } catch {}
+    if (!profile) {
+      const res = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      profile = res.data;
+    }
     const r = profile?.role;
     const dashboard = r === "admin" ? "/dashboard/admin" : r === "manager" ? "/dashboard/manager" : r === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
     setLoginLoading(false);
@@ -95,6 +118,15 @@ export default function HomePage() {
             </CardHeader>
             <form onSubmit={handleLogin}>
               <CardContent className="space-y-4 pt-0">
+                <OAuthButtons />
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <span className="w-full border-t" />
+                  </div>
+                  <div className="relative flex justify-center text-xs uppercase">
+                    <span className="bg-card px-2 text-muted-foreground">or</span>
+                  </div>
+                </div>
                 {loginError && (
                   <p className="text-sm text-destructive" role="alert">{loginError}</p>
                 )}
@@ -112,14 +144,37 @@ export default function HomePage() {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    autoComplete="current-password"
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? "text" : "password"}
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      autoComplete="current-password"
+                      className="pr-10"
+                    />
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="absolute right-0 top-0 h-9 w-9 shrink-0"
+                      onClick={() => setShowPassword(!showPassword)}
+                      aria-label={showPassword ? "Hide password" : "Show password"}
+                    >
+                      {showPassword ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                    </Button>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="remember"
+                    checked={rememberMe}
+                    onChange={(e) => setRememberMe(e.target.checked)}
+                    className="h-4 w-4 rounded border-input"
                   />
+                  <Label htmlFor="remember" className="text-sm font-normal cursor-pointer">Save password</Label>
                 </div>
               </CardContent>
               <CardFooter className="flex flex-col gap-3 pt-4">

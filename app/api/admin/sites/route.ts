@@ -7,13 +7,13 @@ async function requireAdmin() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   return { ok: true as const, admin, user };
 }
 
@@ -22,14 +22,14 @@ export async function GET() {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin } = r;
-    const fullSelect = "id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,created_at";
     const minimalSelect = "id,name,address,manager_id,created_at";
-    const result = await admin.from("sites").select(fullSelect).order("created_at", { ascending: false });
-    if (result.error) {
-      const fallback = await admin.from("sites").select(minimalSelect).order("created_at", { ascending: false });
-      if (fallback.error) return NextResponse.json({ error: fallback.error.message }, { status: 500 });
-      return NextResponse.json(fallback.data ?? []);
+    let result = await admin.from("sites").select(minimalSelect).order("created_at", { ascending: false });
+    try {
+      const fullResult = await admin.from("sites").select("id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,created_at").order("created_at", { ascending: false });
+      if (!fullResult.error && fullResult.data) result = fullResult;
+    } catch {
     }
+    if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
     return NextResponse.json(result.data ?? []);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
@@ -47,7 +47,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "manager_id and name required" }, { status: 400 });
     }
 
-    const { data, error } = await admin.from("sites").insert({
+    const fullInsert = {
       manager_id,
       name: name.trim(),
       address: address?.trim() || "",
@@ -56,8 +56,13 @@ export async function POST(request: Request) {
       iban: iban != null && iban !== "" ? iban : null,
       swift_code: swift_code?.trim() || null,
       tax_amount: tax_amount != null && tax_amount !== "" ? Number(tax_amount) : null,
-    }).select("id").single();
-
+    };
+    let result = await admin.from("sites").insert(fullInsert).select("id").single();
+    if (result.error && (result.error.message?.includes("column") || result.error.message?.includes("schema cache"))) {
+      const coreInsert = { manager_id, name: name.trim(), address: address?.trim() || "" };
+      result = await admin.from("sites").insert(coreInsert).select("id").single();
+    }
+    const { data, error } = result;
     if (error) {
       if (error.code === "23505") return NextResponse.json({ error: "Manager already has a site" }, { status: 400 });
       return NextResponse.json({ error: error.message }, { status: 400 });

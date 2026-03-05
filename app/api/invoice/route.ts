@@ -78,7 +78,11 @@ export async function GET(request: Request) {
       const buildings = (await admin.from("buildings").select("id, name, site_id").in("id", buildIds)).data ?? [];
       buildings.forEach((b: { id: string; name: string; site_id: string }) => { buildingMap.set(b.id, b.name); });
       const firstSiteId = (buildings[0] as { site_id: string })?.site_id;
-      if (firstSiteId) site = (await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", firstSiteId).single()).data;
+      if (firstSiteId) {
+        const minimalRes = await admin.from("sites").select("id, name, address, manager_id").eq("id", firstSiteId).single();
+        const fullRes = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", firstSiteId).single();
+        site = (fullRes.error ? minimalRes : fullRes).data as typeof site;
+      }
     } else {
       const { data: bill, error: billErr } = await admin.from("bills")
         .select("id, unit_id, period_month, period_year, total_amount, paid_at, reference_code")
@@ -91,7 +95,10 @@ export async function GET(request: Request) {
       if (!unit) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
       const { data: building } = await admin.from("buildings").select("id, name, site_id").eq("id", (unit as { building_id: string }).building_id).single();
       if (building?.site_id) {
-        site = (await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", (building as { site_id: string }).site_id).single()).data;
+        const sid = (building as { site_id: string }).site_id;
+        const fullRes = await admin.from("sites").select("id, name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id").eq("id", sid).single();
+        const minimalRes = await admin.from("sites").select("id, name, address, manager_id").eq("id", sid).single();
+        site = (fullRes.error ? minimalRes : fullRes).data as typeof site;
         buildingMap.set((building as { id: string }).id, (building as { name: string }).name ?? "");
       }
       ownerProfile = (await admin.from("profiles").select("name, surname, email").eq("id", user.id).single()).data;

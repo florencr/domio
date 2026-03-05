@@ -184,12 +184,12 @@ export default function ManagerPage() {
     const results = await Promise.all([
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url").eq("id", user.id).single(),
       sb.from("sites").select("id,name,address").eq("manager_id", user.id).maybeSingle(),
-      sb.from("buildings").select("id,name,site_id"),
+      fetch("/api/manager/buildings").then(r => r.ok ? r.json() : []),
       sb.from("units").select("id,unit_name,type,size_m2,building_id,entrance,floor"),
       sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category,site_id"),
       sb.from("expenses").select("id,title,category,vendor,amount,frequency,created_at,paid_at,period_month,period_year,template_id,site_id"),
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url"),
-      sb.from("unit_types").select("id,name,site_id"),
+      fetch("/api/manager/unit-types").then(r => r.ok ? r.json() : []),
       sb.from("vendors").select("id,name,site_id"),
       sb.from("service_categories").select("id,name,site_id"),
       sb.from("bills").select("id,unit_id,period_month,period_year,total_amount,status,paid_at,receipt_url,receipt_filename,receipt_path,reference_code").order("period_year",{ascending:false}).order("period_month",{ascending:false}).limit(200),
@@ -197,16 +197,20 @@ export default function ManagerPage() {
       sb.from("unit_tenant_assignments").select("unit_id,tenant_id,is_payment_responsible"),
     ]);
 
-    const profile = results[0].data as Profile | null;
+    let profile = results[0].data as Profile | null;
+    if (!profile) {
+      const apiRes = await fetch("/api/profile");
+      if (apiRes.ok) profile = (await apiRes.json()) as Profile;
+    }
     if (profile?.role !== "manager") { router.push("/dashboard"); return; }
 
     const site = (results[1].data ?? null) as Site | null;
     const siteId = site?.id ?? null;
-    const buildingsData = (results[2].data ?? []) as Building[];
+    const buildingsData = (results[2] ?? []) as Building[];
     const allUnits = (results[3].data ?? []) as Unit[];
     const allServices = (results[4].data ?? []) as Service[];
     const allExpenses = (results[5].data ?? []) as Expense[];
-    const allUnitTypes = (results[7].data ?? []) as UnitType[];
+    const allUnitTypes = (results[7] ?? []) as UnitType[];
     const allVendors = (results[8].data ?? []) as Vendor[];
     const allServiceCategories = (results[9].data ?? []) as ServiceCategory[];
 
@@ -284,6 +288,7 @@ export default function ManagerPage() {
               <div className="p-3 space-y-2">
                 <p className="font-semibold">{profile?.name} {profile?.surname}</p>
                 <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
+                {data.site?.name != null && <p className="text-sm text-muted-foreground">Site: {data.site.name}</p>}
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
@@ -1961,31 +1966,32 @@ function UnitTypesCfg({ data, reload }: { data: Data; reload: () => void }) {
   const [editingId, setEditingId] = useState<string|null>(null);
   const [editName, setEditName] = useState("");
 
-  const sb = createClient();
-
   // Count units per type
   const countMap = new Map<string,number>();
   data.units.forEach(u => countMap.set(u.type, (countMap.get(u.type) ?? 0) + 1));
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
-    const { error } = await sb.from("unit_types").insert({ name: newName });
-    if (!error) { setMsg({text:"Unit type created.",ok:true}); setNewName(""); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/unit-types", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) });
+    const body = await r.json();
+    if (r.ok) { setMsg({text:"Unit type created.",ok:true}); setNewName(""); reload(); }
+    else setMsg({text:body.error || r.statusText,ok:false});
   }
 
   async function save(id: string) {
-    const { error } = await sb.from("unit_types").update({ name: editName }).eq("id", id);
-    if (!error) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch("/api/manager/unit-types", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: editName }) });
+    const body = await r.json();
+    if (r.ok) { setMsg({text:"Updated.",ok:true}); setEditingId(null); reload(); }
+    else setMsg({text:body.error || r.statusText,ok:false});
   }
 
   async function del(id: string, typeName: string) {
     const count = countMap.get(typeName) ?? 0;
     if (count > 0) { setMsg({text:`Cannot delete — ${count} unit${count!==1?"s":""} use this type.`,ok:false}); return; }
-    const { error } = await sb.from("unit_types").delete().eq("id", id);
-    if (!error) { setMsg({text:"Deleted.",ok:true}); reload(); }
-    else setMsg({text:error.message,ok:false});
+    const r = await fetch(`/api/manager/unit-types?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+    const body = await r.json();
+    if (r.ok) { setMsg({text:"Deleted.",ok:true}); reload(); }
+    else setMsg({text:body.error || r.statusText,ok:false});
   }
 
   return (

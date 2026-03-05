@@ -48,6 +48,7 @@ BEGIN
     JOIN buildings b ON b.id = u.building_id
     WHERE b.site_id = p_site_id
   );
+  UPDATE expenses SET paid_at = NULL WHERE site_id = p_site_id;
   DELETE FROM expenses WHERE site_id = p_site_id;
   DELETE FROM services WHERE site_id = p_site_id;
   DELETE FROM units WHERE building_id IN (SELECT id FROM buildings WHERE site_id = p_site_id);

@@ -7,13 +7,13 @@ async function requireAdmin() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   return { ok: true as const, admin, user };
 }
 

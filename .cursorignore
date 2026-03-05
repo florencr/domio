@@ -1,0 +1,11 @@
+﻿# Heavy folders - skip indexing to save RAM
+node_modules/
+.next/
+out/
+build/
+dist/
+coverage/
+.vercel/
+.supabase/
+*.log
+.cache/

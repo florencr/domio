@@ -90,6 +90,11 @@ BEGIN
   DELETE FROM vendors;
   DELETE FROM service_categories;
 
+  -- Re-seed default unit types so managers always have options
+  INSERT INTO unit_types (name) VALUES
+    ('apartment'), ('villa'), ('parking'), ('garden'), ('patio')
+  ON CONFLICT (name) DO NOTHING;
+
   -- Re-enable delete locks
   ALTER TABLE bills ENABLE TRIGGER trg_prevent_bill_delete_locked;
   ALTER TABLE expenses ENABLE TRIGGER trg_prevent_expense_delete_locked;

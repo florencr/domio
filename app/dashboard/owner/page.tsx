@@ -18,9 +18,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuIte
 
 type OwnerData = {
   profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
+  siteNames: string[];
   units: { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string }[];
   allUnits: { id: string; unit_name: string }[];
-  buildings: { id: string; name: string }[];
+  buildings: { id: string; name: string; site_id?: string | null }[];
   bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null }[];
   expenses: { id: string; title: string; vendor: string; amount: number; period_month: number | null; period_year: number | null }[];
   unitTenantAssignments: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
@@ -42,7 +43,7 @@ function expenseRef(e: { title?: string; category?: string; period_month?: numbe
 
 export default function OwnerPage() {
   const router = useRouter();
-  const [data, setData] = useState<OwnerData>({ profile: null, units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [], tenants: [] });
+  const [data, setData] = useState<OwnerData>({ profile: null, siteNames: [], units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [], tenants: [] });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("billing");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -77,12 +78,16 @@ export default function OwnerPage() {
       sb.from("profiles").select("id, name, surname, email, role, phone").eq("id", user.id).single(),
       sb.from("unit_owners").select("unit_id").eq("owner_id", user.id),
     ]);
-    const profile = profileRes.data;
+    let profile = profileRes.data;
+    if (!profile) {
+      const apiRes = await fetch("/api/profile");
+      if (apiRes.ok) profile = (await apiRes.json()) as typeof profile;
+    }
     const unitIds = (unitOwnersRes.data ?? []).map(u => u.unit_id);
     if (!unitIds.length) {
       const [expensesRes, tenantsRes] = await Promise.all([sb.from("expenses").select("id, title, vendor, amount, period_month, period_year"), sb.from("profiles").select("id, name, surname, email").eq("role", "tenant")]);
       const allUnits = (await sb.from("units").select("id, unit_name")).data ?? [];
-      setData({ profile, units: [], allUnits, buildings: [], bills: [], expenses: expensesRes.data ?? [], unitTenantAssignments: [], tenants: tenantsRes.data ?? [] });
+      setData({ profile, siteNames: [], units: [], allUnits, buildings: [], bills: [], expenses: expensesRes.data ?? [], unitTenantAssignments: [], tenants: tenantsRes.data ?? [] });
       setLoading(false);
       return;
     }
@@ -91,7 +96,7 @@ export default function OwnerPage() {
     const [unitsRes, allUnitsRes, buildingsRes, billsRes, expensesRes, assignmentsRes, tenantsRes] = await Promise.all([
       sb.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
       sb.from("units").select("id, unit_name"),
-      sb.from("buildings").select("id, name"),
+      sb.from("buildings").select("id, name, site_id"),
       sb.rpc("get_my_bills", { lim: 200 }),
       sb.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
       sb.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds),
@@ -99,8 +104,15 @@ export default function OwnerPage() {
     ]);
     const rawBills = (billsRes.data ?? []) as { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null }[];
     const allBills = rawBills.filter(b => unitIdSet.has(b.unit_id));
+    const units = (unitsRes.data ?? []) as { id: string; unit_name: string; building_id: string }[];
+    const buildings = (buildingsRes.data ?? []) as { id: string; name: string; site_id?: string | null }[];
+    const buildingIds = new Set(units.map(u => u.building_id));
+    const siteIds = [...new Set(buildings.filter(b => buildingIds.has(b.id) && b.site_id).map(b => b.site_id!))];
+    const sitesData = siteIds.length ? (await sb.from("sites").select("id, name").in("id", siteIds)).data ?? [] : [];
+    const siteNames = (sitesData as { name: string }[]).map(s => s.name);
     setData({
       profile,
+      siteNames,
       units: unitsRes.data ?? [],
       allUnits: allUnitsRes.data ?? [],
       buildings: buildingsRes.data ?? [],
@@ -315,7 +327,9 @@ export default function OwnerPage() {
               <div className="p-3 space-y-2">
                 <p className="font-semibold">{profile?.name} {profile?.surname}</p>
                 <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
+                {data.siteNames.length > 0 && <p className="text-sm text-muted-foreground">Site: {data.siteNames.join(", ")}</p>}
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
+                {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
                 {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
               </div>
               <DropdownMenuSeparator />

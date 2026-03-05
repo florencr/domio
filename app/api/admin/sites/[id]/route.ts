@@ -7,13 +7,13 @@ async function requireAdmin() {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   const admin = createAdminClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
+  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+  if (profile?.role !== "admin") return { ok: false as const, status: 403, error: "Admin only" };
   return { ok: true as const, admin, user };
 }
 
@@ -42,7 +42,17 @@ export async function PATCH(
       return NextResponse.json({ error: "name, address, vat_account, bank_name, iban, swift_code, tax_amount or manager_id required" }, { status: 400 });
     }
 
-    await admin.from("sites").update(updates).eq("id", id);
+    let updateResult = await admin.from("sites").update(updates).eq("id", id);
+    if (updateResult.error && (updateResult.error.message?.includes("column") || updateResult.error.message?.includes("schema cache"))) {
+      const coreUpdates: Record<string, unknown> = {};
+      if (updates.name !== undefined) coreUpdates.name = updates.name;
+      if (updates.address !== undefined) coreUpdates.address = updates.address;
+      if (updates.manager_id !== undefined) coreUpdates.manager_id = updates.manager_id;
+      if (Object.keys(coreUpdates).length > 0) {
+        updateResult = await admin.from("sites").update(coreUpdates).eq("id", id);
+      }
+    }
+    if (updateResult.error) return NextResponse.json({ error: updateResult.error.message }, { status: 500 });
 
     await logAudit({
       user_id: user.id,

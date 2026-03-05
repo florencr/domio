@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createClient as createAdminClient } from "@supabase/supabase-js";
 import type { PricingModel, ServiceFrequency } from "@/types/database";
 
 async function getSupabase() {
@@ -157,7 +158,16 @@ export async function deleteService(id: string): Promise<{ success: boolean; err
 export async function createUnitType(name: string): Promise<{ success: boolean; error?: string }> {
   const { supabase, error: authErr } = await getSupabase();
   if (authErr || !supabase) return { success: false, error: authErr ?? "Not authenticated" };
-  const { error } = await supabase.from("unit_types").insert({ name: name.trim() });
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return { success: false, error: "Not authenticated" };
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
+  const siteId = site?.id ?? null;
+  const { error } = await admin.from("unit_types").insert({ name: name.trim(), site_id: siteId });
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/manager");
   return { success: true };
@@ -176,11 +186,16 @@ async function isUnitTypeInUse(supabase: Awaited<ReturnType<typeof createClient>
 export async function updateUnitType(id: string, newName: string): Promise<{ success: boolean; error?: string }> {
   const { supabase, error: authErr } = await getSupabase();
   if (authErr || !supabase) return { success: false, error: authErr ?? "Not authenticated" };
-  const { data: row } = await supabase.from("unit_types").select("name").eq("id", id).single();
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  const { data: row } = await admin.from("unit_types").select("name").eq("id", id).single();
   if (!row) return { success: false, error: "Unit type not found" };
-  if (await isUnitTypeInUse(supabase, row.name))
+  if (await isUnitTypeInUse(admin, row.name))
     return { success: false, error: "Cannot edit: this type is used by units or services" };
-  const { error } = await supabase.from("unit_types").update({ name: newName.trim() }).eq("id", id);
+  const { error } = await admin.from("unit_types").update({ name: newName.trim() }).eq("id", id);
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/manager");
   return { success: true };
@@ -243,11 +258,16 @@ export async function deleteVendor(id: string): Promise<{ success: boolean; erro
 export async function deleteUnitType(id: string): Promise<{ success: boolean; error?: string }> {
   const { supabase, error: authErr } = await getSupabase();
   if (authErr || !supabase) return { success: false, error: authErr ?? "Not authenticated" };
-  const { data: row } = await supabase.from("unit_types").select("name").eq("id", id).single();
+  const admin = createAdminClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    { auth: { autoRefreshToken: false, persistSession: false } }
+  );
+  const { data: row } = await admin.from("unit_types").select("name").eq("id", id).single();
   if (!row) return { success: false, error: "Unit type not found" };
-  if (await isUnitTypeInUse(supabase, row.name))
+  if (await isUnitTypeInUse(admin, row.name))
     return { success: false, error: "Cannot delete: this type is used by units or services" };
-  const { error } = await supabase.from("unit_types").delete().eq("id", id);
+  const { error } = await admin.from("unit_types").delete().eq("id", id);
   if (error) return { success: false, error: error.message };
   revalidatePath("/dashboard/manager");
   return { success: true };
