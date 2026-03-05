@@ -44,7 +44,7 @@ export async function POST(request: Request) {
     const toProcess = unitsList.filter(u => !done.has(u.id));
     if (!toProcess.length) return NextResponse.json({ error: "Bills already generated for this period", alreadyDone: true }, { status: 400 });
 
-    const { data: expenses } = await admin.from("expenses").select("id, title, category, vendor, amount, frequency, site_id, building_id").or(`site_id.eq.${siteId},site_id.is.null`);
+    const { data: expenses } = await admin.from("expenses").select("id, title, category, vendor, amount, frequency, site_id, building_id, template_id, period_month, period_year").or(`site_id.eq.${siteId},site_id.is.null`);
     const recurrentTemplates = (expenses ?? []).filter(
       (e: { frequency: string; template_id: string | null; period_month: number | null }) =>
         e.frequency === "recurrent" && !e.template_id && e.period_month == null

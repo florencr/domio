@@ -695,7 +695,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                       <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
                       <td className="py-3 pr-4">
                         {lineTypeLabel ? (
-                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${line.line_type === "manual" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
+                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${lineTypeLabel === "Once off" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
                             {lineTypeLabel}
                           </span>
                         ) : "—"}
