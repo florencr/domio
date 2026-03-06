@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
   const sb = await createClient();
@@ -15,7 +16,7 @@ async function requireManager() {
   if (profile?.role !== "manager") return { ok: false as const, status: 403, error: "Manager only" };
   const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
   const siteId = site?.id ?? null;
-  return { ok: true as const, admin, siteId };
+  return { ok: true as const, admin, siteId, user };
 }
 
 export async function POST(request: Request) {
@@ -40,6 +41,16 @@ export async function POST(request: Request) {
 
     const { data, error } = await admin.from("services").insert(insert).select("id").single();
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await logAudit({
+      user_id: r.user.id,
+      user_email: r.user.email ?? undefined,
+      action: "create",
+      entity_type: "service",
+      entity_id: data.id,
+      entity_label: name.trim(),
+      site_id: siteId ?? undefined,
+      new_values: insert as Record<string, unknown>,
+    });
     return NextResponse.json(data);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
@@ -56,7 +67,7 @@ export async function PATCH(request: Request) {
     const { id, name, unit_type: unitType, category, pricing_model: pricing, price_value: price, frequency: freq } = body;
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const { data: existing } = await admin.from("services").select("site_id").eq("id", id).single();
+    const { data: existing } = await admin.from("services").select("site_id, name").eq("id", id).single();
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (siteId && (existing as { site_id?: string }).site_id && (existing as { site_id: string }).site_id !== siteId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -72,6 +83,16 @@ export async function PATCH(request: Request) {
 
     const { error } = await admin.from("services").update(update).eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await logAudit({
+      user_id: r.user.id,
+      user_email: r.user.email ?? undefined,
+      action: "update",
+      entity_type: "service",
+      entity_id: id,
+      entity_label: String(update.name ?? (existing as { name?: string }).name ?? id),
+      site_id: siteId ?? undefined,
+      new_values: update as Record<string, unknown>,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
@@ -88,7 +109,7 @@ export async function DELETE(request: Request) {
     const id = url.searchParams.get("id");
     if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
 
-    const { data: existing } = await admin.from("services").select("site_id").eq("id", id).single();
+    const { data: existing } = await admin.from("services").select("site_id, name").eq("id", id).single();
     if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 });
     if (siteId && (existing as { site_id?: string }).site_id && (existing as { site_id: string }).site_id !== siteId) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 });
@@ -96,6 +117,15 @@ export async function DELETE(request: Request) {
 
     const { error } = await admin.from("services").delete().eq("id", id);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await logAudit({
+      user_id: r.user.id,
+      user_email: r.user.email ?? undefined,
+      action: "delete",
+      entity_type: "service",
+      entity_id: id,
+      entity_label: (existing as { name?: string }).name ?? id,
+      site_id: siteId ?? undefined,
+    });
     return NextResponse.json({ success: true });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });

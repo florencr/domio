@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 async function requireManager() {
   const sb = await createClient();
@@ -15,14 +16,14 @@ async function requireManager() {
   if (profile?.role !== "manager") return { ok: false as const, status: 403, error: "Manager only" };
   const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
   if (!site?.id) return { ok: false as const, status: 403, error: "No site" };
-  return { ok: true as const, admin, siteId: site.id };
+  return { ok: true as const, admin, siteId: site.id, user };
 }
 
 export async function POST(request: Request) {
   try {
     const r = await requireManager();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-    const { admin, siteId } = r;
+    const { admin, siteId, user } = r;
 
     const body = await request.json();
     const { month: monthParam, year: yearParam } = body;
@@ -110,6 +111,16 @@ export async function POST(request: Request) {
         if (lineErr) return NextResponse.json({ error: "Bill line: " + lineErr.message }, { status: 400 });
       }
     }
+
+    await logAudit({
+      user_id: user.id,
+      user_email: user.email ?? undefined,
+      action: "create",
+      entity_type: "bill",
+      entity_label: `${m}/${y} – ${insertedBills.length} bills`,
+      site_id: siteId,
+      new_values: { period_month: m, period_year: y, count: insertedBills.length },
+    });
 
     return NextResponse.json({ success: true, count: insertedBills.length });
   } catch (err) {

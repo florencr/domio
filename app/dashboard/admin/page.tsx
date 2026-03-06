@@ -1092,6 +1092,8 @@ function AuditTab() {
             <SelectItem value="site">Sites</SelectItem>
             <SelectItem value="building">Buildings</SelectItem>
             <SelectItem value="manager">Managers</SelectItem>
+            <SelectItem value="unit">Units</SelectItem>
+            <SelectItem value="service">Services</SelectItem>
             <SelectItem value="bill">Bills</SelectItem>
             <SelectItem value="expense">Expenses</SelectItem>
           </SelectContent>

@@ -1895,6 +1895,9 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
       const j = await res.json();
       if (!res.ok) { setMsg({ text: j.error || "Failed to assign owner/tenant", ok: false }); return; }
     }
+    if (inserted?.id) {
+      fetch("/api/manager/log-audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "create", entity_type: "unit", entity_id: inserted.id, entity_label: f.name, new_values: { unit_name: f.name, type: f.type, building_id: f.buildingId } }) }).catch(() => {});
+    }
     setMsg({text:"Unit created.",ok:true}); setF({buildingId:"",name:"",type:"",size:"",entrance:"",floor:"",ownerId:"none",tenantId:"none"}); setShowCreate(false); reload();
   }
 
@@ -1905,13 +1908,17 @@ function UnitsCfg({ data, reload }: { data: Data; reload: () => void }) {
     const res = await fetch("/api/manager/assign-unit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ unitId: editingUnit.id, ownerId: editF.ownerId && editF.ownerId !== "none" ? editF.ownerId : null, tenantId: editF.tenantId && editF.tenantId !== "none" ? editF.tenantId : null }) });
     const j = await res.json();
     if (!res.ok) { setMsg({ text: j.error || "Failed to assign owner/tenant", ok: false }); return; }
+    fetch("/api/manager/log-audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "update", entity_type: "unit", entity_id: editingUnit.id, entity_label: editF.name, new_values: { unit_name: editF.name, type: editF.type } }) }).catch(() => {});
     setMsg({text:"Unit updated.",ok:true}); setEditingUnit(null); reload();
   }
 
   async function del(id: string) {
+    const unit = data.units.find(u => u.id === id);
     const { error } = await sb.from("units").delete().eq("id", id);
-    if (!error) { setMsg({text:"Unit deleted.",ok:true}); setEditingUnit(null); reload(); }
-    else setMsg({text:error.message,ok:false});
+    if (!error) {
+      if (unit) fetch("/api/manager/log-audit", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "delete", entity_type: "unit", entity_id: id, entity_label: unit.unit_name }) }).catch(() => {});
+      setMsg({text:"Unit deleted.",ok:true}); setEditingUnit(null); reload();
+    } else setMsg({text:error.message,ok:false});
   }
 
   return (
