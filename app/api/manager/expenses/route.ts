@@ -13,9 +13,36 @@ async function requireManager() {
   );
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "manager") return { ok: false as const, status: 403, error: "Manager only" };
-  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
-  const siteId = site?.id ?? null;
+  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).maybeSingle();
+  const siteId = (site as { id?: string } | null)?.id ?? null;
   return { ok: true as const, admin, siteId };
+}
+
+export async function GET() {
+  try {
+    const r = await requireManager();
+    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
+    const { admin, siteId } = r;
+
+    const cols = "id,title,category,vendor,amount,frequency,created_at,paid_at,period_month,period_year,template_id,site_id";
+    let res: { data: unknown[] | null; error: { message: string } | null };
+
+    if (siteId) {
+      res = await admin.from("expenses").select(cols).or(`site_id.eq.${siteId},site_id.is.null`);
+    } else {
+      res = await admin.from("expenses").select(cols).is("site_id", null);
+    }
+
+    if (res.error) {
+      console.error("[expenses GET]", res.error);
+      return NextResponse.json({ error: res.error.message }, { status: 500 });
+    }
+    return NextResponse.json(res.data ?? []);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[expenses GET]", err);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
 
 export async function POST(request: Request) {
@@ -26,12 +53,12 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const { title, category, vendor, amount, frequency: freq } = body;
-    if (!title?.trim() || !category?.trim() || !vendor?.trim()) return NextResponse.json({ error: "title, category, vendor required" }, { status: 400 });
+    if (!title?.trim()) return NextResponse.json({ error: "Title is required" }, { status: 400 });
 
     const insert: Record<string, unknown> = {
       title: title.trim(),
-      category: category.trim(),
-      vendor: vendor.trim(),
+      category: (typeof category === "string" ? category.trim() : "") || "Misc",
+      vendor: (typeof vendor === "string" ? vendor.trim() : "") || "—",
       amount: typeof amount === "number" ? amount : parseFloat(String(amount)) || 0,
       frequency: freq || "recurrent",
     };

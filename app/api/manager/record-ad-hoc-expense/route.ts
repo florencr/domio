@@ -13,7 +13,7 @@ async function requireManager() {
   );
   const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
   if (profile?.role !== "manager") return { ok: false as const, status: 403, error: "Manager only" };
-  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
+  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).maybeSingle();
   if (!site?.id) return { ok: false as const, status: 403, error: "No site" };
   return { ok: true as const, admin, siteId: site.id };
 }

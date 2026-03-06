@@ -3,10 +3,10 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-export default function ManagerPage() {
+export default function ManagerConfigPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/dashboard/manager/billing");
+    router.replace("/dashboard/manager/config/buildings");
   }, [router]);
   return (
     <div className="min-h-[200px] flex items-center justify-center">

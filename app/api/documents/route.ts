@@ -27,11 +27,39 @@ export async function GET(request: Request) {
     const buildingId = searchParams.get("buildingId");
     const unitId = searchParams.get("unitId");
     const expenseId = searchParams.get("expenseId");
+    const listAll = searchParams.get("listAll") === "1";
+
+    if (listAll && siteId) {
+      const { data: buildings } = await admin.from("buildings").select("id,name").eq("site_id", siteId);
+      const buildingIds = (buildings ?? []).map((b: { id: string }) => b.id);
+      const buildingMap = new Map((buildings ?? []).map((b: { id: string; name: string }) => [b.id, b.name]));
+      const { data: expenses } = await admin.from("expenses").select("id").eq("site_id", siteId);
+      const expenseIds = (expenses ?? []).map((e: { id: string }) => e.id);
+      const docsByBuilding = buildingIds.length > 0
+        ? await admin.from("documents").select("id,name,path,mime_type,size_bytes,category,created_at,building_id,unit_id,expense_id").in("building_id", buildingIds).order("created_at", { ascending: false })
+        : { data: [] };
+      const docsByExpense = expenseIds.length > 0
+        ? await admin.from("documents").select("id,name,path,mime_type,size_bytes,category,created_at,building_id,unit_id,expense_id").in("expense_id", expenseIds).order("created_at", { ascending: false })
+        : { data: [] };
+      const allDocs = [...(docsByBuilding.data ?? []), ...(docsByExpense.data ?? [])].sort((a, b) => new Date((b as { created_at: string }).created_at).getTime() - new Date((a as { created_at: string }).created_at).getTime());
+      const unitIds = [...new Set(allDocs.map((d: { unit_id?: string | null }) => d.unit_id).filter(Boolean))] as string[];
+      const { data: units } = unitIds.length > 0 ? await admin.from("units").select("id,unit_name,building_id").in("id", unitIds) : { data: [] };
+      const unitMap = new Map((units ?? []).map((u: { id: string; unit_name: string; building_id: string }) => [u.id, { name: u.unit_name, buildingId: u.building_id }]));
+      const docsWithNames = allDocs.map((d: { id: string; name: string; building_id?: string | null; unit_id?: string | null; expense_id?: string | null; [k: string]: unknown }) => {
+        const bId = d.building_id;
+        const uId = d.unit_id;
+        const buildingName = bId ? buildingMap.get(bId) ?? "—" : (d.expense_id ? "Expense" : "—");
+        const unitInfo = uId ? unitMap.get(uId) : null;
+        const unitName = uId ? (unitInfo?.name ?? "—") : "—";
+        return { ...d, building_name: buildingName, unit_name: unitName };
+      });
+      return NextResponse.json({ documents: docsWithNames });
+    }
 
     if (expenseId) {
       const { data: expense } = await admin.from("expenses").select("site_id").eq("id", expenseId).single();
       if (!expense || (expense as { site_id: string | null }).site_id !== siteId) return NextResponse.json({ error: "Not authorized" }, { status: 403 });
-      const { data, error } = await admin.from("documents").select("id,name,path,mime_type,size_bytes,category,created_at,unit_id,expense_id")
+      const { data, error } = await admin.from("documents").select("id,name,path,mime_type,size_bytes,category,created_at,unit_id,expense_id,building_id")
         .eq("expense_id", expenseId).order("created_at", { ascending: false });
       if (error) return NextResponse.json({ error: error.message }, { status: 500 });
       return NextResponse.json({ documents: data ?? [] });

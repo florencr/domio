@@ -76,7 +76,7 @@ export function NotificationBell({ isManager, onSendClick, onSeeAllClick }: Noti
               className="w-full px-2 py-2 text-sm font-medium text-blue-600 hover:bg-accent rounded-sm text-left"
               onClick={() => { onSendClick(); setOpen(false); }}
             >
-              + Send notification
+              + Send new message
             </button>
             <div className="h-px bg-border mx-2" />
           </>
