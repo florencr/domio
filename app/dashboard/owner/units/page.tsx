@@ -8,7 +8,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useOwnerData } from "../context";
 
 export default function OwnerUnitsPage() {
-  const { data } = useOwnerData();
+  const { data, assignTenant, removeTenant } = useOwnerData();
   const [unitsSortCol, setUnitsSortCol] = useState<string | null>(null);
   const [unitsSortDir, setUnitsSortDir] = useState<"asc" | "desc">("asc");
 
@@ -66,14 +66,14 @@ export default function OwnerUnitsPage() {
                           return t ? (
                             <div key={a.tenant_id} className="flex items-center gap-2">
                               <span className="text-sm">{t.name} {t.surname}</span>
-                              <Button size="sm" variant="ghost" className="h-6 text-xs text-red-600" onClick={() => data.assignTenant ? void 0 : {} /* will use context */}>Remove</Button>
+                              <Button size="sm" variant="ghost" className="h-6 text-xs text-red-600" onClick={() => removeTenant(u.id, a.tenant_id)}>Remove</Button>
                             </div>
                           ) : null;
                         })}
                         {tenants.length > 0 ? (
                           (() => { const avail = tenants.filter(t => !assigned.some(a => a.tenant_id === t.id)); return avail.length > 0 && (
                             <div className="flex items-center gap-2 mt-0.5">
-                              <Select onValueChange={(v) => { if (v && v !== "none") { /* assignTenant from context */ } }}>
+                              <Select onValueChange={(v) => { if (v && v !== "none") assignTenant(u.id, v); }}>
                                 <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="+ Assign tenant" /></SelectTrigger>
                                 <SelectContent>
                                   <SelectItem value="none">— Select —</SelectItem>
