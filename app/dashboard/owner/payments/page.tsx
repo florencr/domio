@@ -10,8 +10,8 @@ export default function OwnerPaymentsPage() {
 
   useEffect(() => {
     fetch("/api/payment-info", { cache: "no-store" })
-      .then(r => r.ok ? r.json() : {})
-      .then(json => setPaymentInfo(json));
+      .then(r => r.ok ? r.json() : Promise.resolve(null))
+      .then((json: Parameters<typeof setPaymentInfo>[0]) => setPaymentInfo(json));
   }, []);
 
   return (
