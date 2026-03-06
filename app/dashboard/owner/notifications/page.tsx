@@ -9,8 +9,8 @@ export default function OwnerNotificationsPage() {
 
   useEffect(() => {
     fetch("/api/notifications", { cache: "no-store" })
-      .then(r => r.ok ? r.json() : {})
-      .then(json => setNotifications(json.notifications ?? []));
+      .then(r => r.ok ? r.json() : Promise.resolve({ notifications: [] }))
+      .then((json: { notifications?: NotificationItem[] }) => setNotifications(json.notifications ?? []));
   }, []);
 
   return (
