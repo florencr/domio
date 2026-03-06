@@ -1,0 +1,6 @@
+{
+  "notifications": {
+    "billReady": "New bills for {month} {year}",
+    "billReadyBody": "Your maintenance bill for {month} {year} is ready. Please log in to view and pay."
+  }
+}

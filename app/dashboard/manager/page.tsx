@@ -351,7 +351,7 @@ export default function ManagerPage() {
             <TabsTrigger value="config" className="flex items-center gap-2"><Settings className="size-4" />Config</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-4">
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <TabsList className="grid w-full grid-cols-4 h-12 min-h-[48px] p-1.5 rounded-lg">
             <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>
             <TabsTrigger value="expenses" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Wallet className="size-4" />Expenses</TabsTrigger>
@@ -387,6 +387,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
   const [showGenerateBills, setShowGenerateBills] = useState(false);
   const [showAddAdhocBill, setShowAddAdhocBill] = useState(false);
   const [addingAdhoc, setAddingAdhoc] = useState(false);
+  const [sendingOverdue, setSendingOverdue] = useState(false);
   const [expandedBillIds, setExpandedBillIds] = useState<Set<string>>(new Set());
   const now = new Date();
   const [addAdhocForm, setAddAdhocForm] = useState({
@@ -540,17 +541,29 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
     ownerPeriodCount.set(k, (ownerPeriodCount.get(k) ?? 0) + 1);
   });
 
+  const billRows: { bill: Bill; line: BillLine | null; lineIndex: number }[] = [];
+  for (const b of sortedBills) {
+    const lines = linesByBill.get(b.id) ?? [];
+    if (lines.length > 0) {
+      lines.forEach((l, i) => billRows.push({ bill: b, line: l, lineIndex: i }));
+    } else {
+      billRows.push({ bill: b, line: null, lineIndex: 0 });
+    }
+  }
+  const billRowCount = billRows.length;
+  const totalBillRowCount = data.bills.reduce((s, b) => s + Math.max(1, (linesByBill.get(b.id) ?? []).length), 0);
+
   return (
     <div className="space-y-4 mt-2">
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-          <CardTitle>All Bills ({sortedBills.length}{filteredBills.length !== data.bills.length ? ` of ${data.bills.length}` : ""})</CardTitle>
-          <div className="flex items-center gap-2 shrink-0">
-            <Button size="sm" className="h-8 gap-1 bg-green-600 hover:bg-green-700 text-white border-0" onClick={() => { setShowGenerateBills(v => !v); setShowAddAdhocBill(false); }}>
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
+          <CardTitle className="text-base sm:text-lg">All Bills ({billRowCount}{billRowCount !== totalBillRowCount ? ` of ${totalBillRowCount}` : ""})</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button size="sm" className="h-8 gap-1 text-white border-0 bg-[#0ac5b2] hover:bg-[#09b3a3]" onClick={() => { setShowGenerateBills(v => !v); setShowAddAdhocBill(false); }}>
               {showGenerateBills ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
               Generate bills
             </Button>
-            <Button size="sm" className="h-8 gap-1 bg-green-500 hover:bg-green-600 text-white border-0" onClick={() => { setShowAddAdhocBill(v => !v); setShowGenerateBills(false); }}>
+            <Button size="sm" className="h-8 gap-1 text-white border-0 bg-[#0ac5b2] hover:bg-[#09b3a3]" onClick={() => { setShowAddAdhocBill(v => !v); setShowGenerateBills(false); }}>
               + Add ad hoc charge
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
@@ -582,6 +595,14 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                   setMsg({ text: `✓ Deleted ${b} bill(s) and ${e} expense(s).`, ok: true });
                   reload();
                 }}>Delete period</Button>
+                <Button variant="outline" size="sm" className="h-8" disabled={sendingOverdue} onClick={async () => {
+                  setSendingOverdue(true); setMsg({ text: "", ok: true });
+                  const res = await fetch("/api/manager/send-overdue-reminders", { method: "POST" });
+                  const json = await res.json();
+                  setSendingOverdue(false);
+                  if (res.ok) setMsg({ text: `✓ Sent overdue reminder to ${json.recipients ?? 0} recipient(s).`, ok: true });
+                  else setMsg({ text: json.error ?? "Failed", ok: false });
+                }}>{sendingOverdue ? "..." : "Send overdue reminders"}</Button>
               </div>
               <div className="text-xs text-muted-foreground">
                 <strong>Recurrent services:</strong> {data.services.filter(s=>s.frequency==="recurrent").length} &nbsp;|&nbsp;
@@ -594,7 +615,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
             <div className="rounded-md border-l-4 border-emerald-500 bg-emerald-50/60 dark:bg-emerald-950/20 p-3 space-y-2">
               <p className="text-xs font-medium text-emerald-800 dark:text-emerald-200">Add ad hoc charge (one-off extra billing per unit)</p>
               <div className="flex flex-wrap gap-2 items-end">
-                <Input value={addAdhocForm.description} onChange={e=>setAddAdhocForm({...addAdhocForm,description:e.target.value})} placeholder="Description (e.g. Extra maintenance)" className="h-8 w-40" />
+                <Input value={addAdhocForm.description} onChange={e=>setAddAdhocForm({...addAdhocForm,description:e.target.value})} placeholder="Description (e.g. Extra maintenance)" className="h-8 min-w-0 flex-1 sm:flex-initial sm:w-40" />
                 <div><Label className="text-xs">Unit type</Label>
                   <Select value={addAdhocForm.unitType} onValueChange={v=>setAddAdhocForm({...addAdhocForm,unitType:v})}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
@@ -607,7 +628,7 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                     <SelectContent><SelectItem value="fixed">Fixed</SelectItem><SelectItem value="per_m2">Per m²</SelectItem></SelectContent>
                   </Select>
                 </div>
-                <Input type="number" step="0.01" value={addAdhocForm.amount} onChange={e=>setAddAdhocForm({...addAdhocForm,amount:e.target.value})} placeholder={addAdhocForm.pricingModel==="per_m2"?"Rate €/m²":"Amount €"} className="h-8 w-24" />
+                <Input type="number" step="0.01" value={addAdhocForm.amount} onChange={e=>setAddAdhocForm({...addAdhocForm,amount:e.target.value})} placeholder={addAdhocForm.pricingModel==="per_m2"?"Rate €/m²":"Amount €"} className="h-8 min-w-0 w-20 sm:w-24" />
                 <Select value={addAdhocForm.periodM} onValueChange={v=>setAddAdhocForm({...addAdhocForm,periodM:v})}><SelectTrigger className="h-8 w-24"><SelectValue /></SelectTrigger><SelectContent>{MONTHS.map((m,i)=><SelectItem key={i} value={String(i+1)}>{m}</SelectItem>)}</SelectContent></Select>
                 <Select value={addAdhocForm.periodY} onValueChange={v=>setAddAdhocForm({...addAdhocForm,periodY:v})}><SelectTrigger className="h-8 w-20"><SelectValue /></SelectTrigger><SelectContent>{yrs.map(y=> <SelectItem key={y} value={String(y)}>{y}</SelectItem>)}</SelectContent></Select>
                 <Button size="sm" className="h-8" onClick={addAdhocBill} disabled={addingAdhoc}>{addingAdhoc ? "..." : "Save"}</Button>
@@ -667,41 +688,35 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {(() => {
-                const rows: { bill: Bill; line: BillLine | null; lineIndex: number }[] = [];
-                for (const b of sortedBills) {
-                  const lines = linesByBill.get(b.id) ?? [];
-                  if (lines.length > 0) {
-                    lines.forEach((l, i) => rows.push({ bill: b, line: l, lineIndex: i }));
-                  } else {
-                    rows.push({ bill: b, line: null, lineIndex: 0 });
-                  }
-                }
-                return rows.map(({ bill: b, line, lineIndex }) => {
-                  const unit = unitMap.get(b.unit_id);
-                  const ownerId = ownerMap.get(b.unit_id);
-                  const owner = ownerId ? profileMap.get(ownerId) : null;
-                  const billToId = unitBillToMap.get(b.unit_id);
-                  const billTo = billToId ? profileMap.get(billToId) : null;
-                  const lineTypeLabel = line ? (line.line_type === "manual" ? "Once off" : "Recurrent") : null;
-                  const lineAmount = line != null ? Number(line.amount) : Number(b.total_amount);
-                  return (
-                    <tr key={line ? `${b.id}-${lineIndex}` : b.id} className="hover:bg-muted/30 transition-colors">
-                      <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
-                      <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
-                      <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
-                      <td className="py-3 pr-4">
-                        {lineTypeLabel ? (
-                          <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${lineTypeLabel === "Once off" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
-                            {lineTypeLabel}
-                          </span>
-                        ) : "—"}
-                      </td>
-                      <td className="py-3 pr-4 text-muted-foreground">{line ? (line.description || "—") : "—"}</td>
-                      <td className="py-3 pr-4 text-right font-semibold tabular-nums">{lineAmount.toFixed(2)}</td>
+              {billRows.map(({ bill: b, line, lineIndex }) => {
+                const lines = linesByBill.get(b.id) ?? [];
+                const unit = unitMap.get(b.unit_id);
+                const ownerId = ownerMap.get(b.unit_id);
+                const owner = ownerId ? profileMap.get(ownerId) : null;
+                const billToId = unitBillToMap.get(b.unit_id);
+                const billTo = billToId ? profileMap.get(billToId) : null;
+                const baseRef = (b.reference_code ?? "—").replace(/-[0-9]+$/, "");
+                const displayRef = lines.length > 1 ? `${baseRef}-${lineIndex + 1}` : (b.reference_code ?? "—");
+                const lineTypeLabel = line ? (line.line_type === "manual" ? "Once off" : "Recurrent") : null;
+                const lineDesc = line ? (line.description || "—") : "—";
+                const lineAmount = line != null ? Number(line.amount) : Number(b.total_amount);
+                return (
+                  <tr key={line ? `${b.id}-${lineIndex}` : b.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-3 pr-4 font-mono text-xs">{displayRef}</td>
+                    <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
+                    <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
+                    <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
+                    <td className="py-3 pr-4">
+                      {lineTypeLabel ? (
+                        <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${lineTypeLabel === "Once off" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
+                          {lineTypeLabel}
+                        </span>
+                      ) : "—"}
+                    </td>
+                    <td className="py-3 pr-4 text-muted-foreground">{lineDesc}</td>
+                    <td className="py-3 pr-4 text-right font-semibold tabular-nums">{lineAmount.toFixed(2)}</td>
                       <td className="py-3 pr-4">
                         {b.paid_at
                           ? <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span>
@@ -737,9 +752,8 @@ function BillingTab({ data, reload, addBills }: { data: Data; reload: () => void
                       </td>
                     </tr>
                   );
-                });
-              })()}
-              {!sortedBills.length && <tr><td colSpan={12} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Use Generate bills to create."}</td></tr>}
+                })}
+              {!billRowCount && <tr><td colSpan={12} className="py-8 text-center text-muted-foreground">{filteredBills.length === 0 && data.bills.length > 0 ? "No bills match filters." : "No bills yet. Use Generate bills to create."}</td></tr>}
             </tbody>
           </table>
           </div>
@@ -960,14 +974,14 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
         <ExpenseDocsPanel expense={expenseDocsFor} onClose={() => setExpenseDocsFor(null)} onReload={reload} />
       )}
       <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-4 pb-2">
-          <CardTitle>All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle>
-          <div className="flex items-center gap-2 shrink-0">
+        <CardHeader className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2">
+          <CardTitle className="text-base sm:text-lg">All Expenses ({displayExpenses.length}{expenseRecords.length !== allExpenseRecords.length ? ` of ${allExpenseRecords.length}` : ""})</CardTitle>
+          <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" className="h-8 gap-1 bg-muted/50 hover:bg-muted border-gray-300" onClick={() => { setShowGenerateExpenses(v => !v); setShowAdd(false); }}>
               {showGenerateExpenses ? <ChevronUp className="size-3.5" /> : <ChevronDown className="size-3.5" />}
               Generate recurrent
             </Button>
-            <Button size="sm" className="h-8 bg-teal-500 hover:bg-teal-600 text-white border-0" onClick={() => { setShowAdd(v => !v); setShowGenerateExpenses(false); }}>
+            <Button size="sm" className="h-8 bg-[#0ac5b2] hover:bg-[#09a89a] text-white border-0" onClick={() => { setShowAdd(v => !v); setShowGenerateExpenses(false); }}>
               + Record expense
             </Button>
             <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
@@ -1007,7 +1021,7 @@ function ExpensesTab({ data, reload }: { data: Data; reload: () => void }) {
             <div className="rounded-md border-l-4 border-teal-400 bg-teal-50/60 dark:bg-teal-950/20 p-3 space-y-2">
               <p className="text-xs font-medium text-teal-800 dark:text-teal-200">Record expense</p>
               <div className="flex flex-wrap gap-2 items-end">
-                <Input value={addF.title} onChange={e=>setAddF({...addF,title:e.target.value})} placeholder="Title" className="h-8 w-32" />
+                <Input value={addF.title} onChange={e=>setAddF({...addF,title:e.target.value})} placeholder="Title" className="h-8 min-w-0 flex-1 sm:flex-initial sm:w-32" />
                 <Select value={addF.category||"none"} onValueChange={v=>setAddF({...addF,category:v==="none"?"":v})}>
                   <SelectTrigger className="h-8 w-28"><SelectValue placeholder="Category" /></SelectTrigger>
                   <SelectContent><SelectItem value="none">—</SelectItem>{serviceCategories.map(c=><SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)}</SelectContent>

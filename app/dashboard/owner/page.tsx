@@ -370,7 +370,7 @@ export default function OwnerPage() {
             <TabsTrigger value="notifications" className="flex items-center gap-2"><Bell className="size-4" />Notifications</TabsTrigger>
           </TabsList>
         </div>
-        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-4">
+        <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <TabsList className="grid w-full grid-cols-4 h-12 min-h-[48px] p-1.5 rounded-lg">
             <TabsTrigger value="units" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><Home className="size-4" />My Units</TabsTrigger>
             <TabsTrigger value="billing" className="py-2.5 text-xs font-semibold flex flex-col items-center gap-0.5"><FileText className="size-4" />Billing</TabsTrigger>

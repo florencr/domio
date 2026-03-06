@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit";
+import { notifyUsers } from "@/lib/notify-users";
 
 async function requireManager() {
   const sb = await createClient();
@@ -121,6 +122,22 @@ export async function POST(request: Request) {
       site_id: siteId,
       new_values: { period_month: m, period_year: y, count: insertedBills.length },
     });
+
+    const unitIds = [...new Set(insertedBills.map(b => b.unit_id))];
+    const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+    const monthName = MONTHS[m - 1] ?? String(m);
+    const notifyUserIds = new Set<string>();
+    if (unitIds.length > 0) {
+      const { data: owners } = await admin.from("unit_owners").select("unit_id, owner_id").in("unit_id", unitIds);
+      const { data: assignments } = await admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds);
+      const billToMap = new Map<string, string>();
+      (owners ?? []).forEach((r: { unit_id: string; owner_id: string }) => { if (!billToMap.has(r.unit_id)) billToMap.set(r.unit_id, r.owner_id); });
+      (assignments ?? []).forEach((a: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }) => {
+        if (a.is_payment_responsible === true) billToMap.set(a.unit_id, a.tenant_id);
+      });
+      billToMap.forEach(uid => notifyUserIds.add(uid));
+    }
+    await notifyUsers(admin, user.id, notifyUserIds, `New bills for ${monthName} ${y}`, `Your maintenance bill for ${monthName} ${y} is ready. Please log in to view and pay.`);
 
     return NextResponse.json({ success: true, count: insertedBills.length });
   } catch (err) {
