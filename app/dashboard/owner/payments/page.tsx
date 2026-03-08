@@ -25,7 +25,7 @@ export default function OwnerPaymentsPage() {
               {(paymentInfo.bank_name || paymentInfo.iban || paymentInfo.swift_code) && (
                 <div className="space-y-2">
                   {paymentInfo.bank_name && <div><p className="text-sm font-medium text-muted-foreground">Bank name</p><p className="text-sm mt-0.5">{paymentInfo.bank_name}</p></div>}
-                  {paymentInfo.iban && <div><p className="text-sm font-medium text-muted-foreground">IBAN</p><p className="text-sm mt-0.5 break-words">{paymentInfo.iban}</p></div>}
+                  {paymentInfo.iban && <div><p className="text-sm font-medium text-muted-foreground">IBAN</p><p className="text-sm mt-0.5 break-words select-text">{paymentInfo.iban}</p></div>}
                   {paymentInfo.swift_code && <div><p className="text-sm font-medium text-muted-foreground">SWIFT code</p><p className="text-sm mt-0.5">{paymentInfo.swift_code}</p></div>}
                 </div>
               )}
@@ -40,7 +40,7 @@ export default function OwnerPaymentsPage() {
                 <div className="text-sm mt-0.5 space-y-1">
                   {paymentInfo.manager_name && <p>{paymentInfo.manager_name}</p>}
                   {paymentInfo.manager_email && <p><a href={`mailto:${paymentInfo.manager_email}`} className="text-primary hover:underline">{paymentInfo.manager_email}</a></p>}
-                  {paymentInfo.manager_phone && <p>{paymentInfo.manager_phone}</p>}
+                  {paymentInfo.manager_phone && <p><a href={`tel:${paymentInfo.manager_phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{paymentInfo.manager_phone}</a></p>}
                   {!paymentInfo.manager_name && !paymentInfo.manager_email && !paymentInfo.manager_phone && <p className="text-muted-foreground">—</p>}
                 </div>
               </div>

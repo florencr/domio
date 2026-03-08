@@ -135,7 +135,7 @@ export default function AdminManagersPage() {
                   <div>
                     <p className="font-medium">{m.name} {m.surname}</p>
                     <p className="text-sm text-muted-foreground">{m.email}</p>
-                    {m.phone && <p className="text-xs text-muted-foreground">{m.phone}</p>}
+                    {m.phone && <p className="text-xs text-muted-foreground"><a href={`tel:${m.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{m.phone}</a></p>}
                     {site && <p className="text-xs text-green-600 mt-1">Site: {site.name}</p>}
                     {!site && <p className="text-xs text-amber-600 mt-1">No site assigned</p>}
                   </div>

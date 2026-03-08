@@ -152,7 +152,7 @@ export default function OwnerBillingPage() {
                   const uploadKey = `${b.period_month}-${b.period_year}-${payerId}`;
                   return (
                     <tr key={b.id} className="hover:bg-muted/30">
-                      <td className="py-3 pr-4 font-mono text-xs">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                      <td className="py-3 pr-4 font-mono text-xs select-text">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
                       <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month - 1]} {b.period_year}</td>
                       <td className="py-3 pr-4 font-medium">{billToName}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>

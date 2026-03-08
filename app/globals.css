@@ -123,4 +123,33 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  /* 1. Remove touch highlight (gray tap flash) + 300ms tap delay for native feel */
+  * {
+    -webkit-tap-highlight-color: transparent;
+    tap-highlight-color: transparent;
+  }
+  html {
+    touch-action: manipulation;
+  }
+
+  /* 2. Prevent accidental text selection except in form fields */
+  * {
+    -webkit-user-select: none;
+    user-select: none;
+  }
+  input,
+  textarea,
+  [contenteditable="true"],
+  a[href^="tel:"] {
+    -webkit-user-select: text;
+    user-select: text;
+  }
+
+  /* 3. Prevent overscroll bounce (rubber-band) - keeps header stable */
+  html,
+  body {
+    overscroll-behavior: none;
+    -webkit-overflow-scrolling: touch;
+  }
 }

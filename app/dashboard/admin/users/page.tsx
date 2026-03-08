@@ -189,7 +189,7 @@ export default function AdminUsersPage() {
                     <tr key={r.id} className={`hover:bg-muted/20 ${r.site_id === "__unassigned__" ? "bg-amber-50/50 dark:bg-amber-950/20" : ""}`}>
                       <td className="px-4 py-2.5 font-medium">{r.name} {r.surname}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{r.email}</td>
-                      <td className="px-4 py-2.5 text-muted-foreground">{r.phone || "—"}</td>
+                      <td className="px-4 py-2.5 text-muted-foreground">{r.phone ? <a href={`tel:${r.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{r.phone}</a> : "—"}</td>
                       <td className="px-4 py-2.5"><span className="capitalize">{r.role}</span></td>
                       <td className="px-4 py-2.5 text-muted-foreground">{r.site_name}</td>
                       <td className="px-4 py-2.5 text-muted-foreground">{r.units.length ? r.units.join(", ") : "—"}</td>

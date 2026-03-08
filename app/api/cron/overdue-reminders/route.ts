@@ -1,37 +1,42 @@
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { notifyUsers } from "@/lib/notify-users";
 
-async function requireManager() {
-  const sb = await createClient();
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
-  const admin = createAdminClient(
+/**
+ * Cron job: sends overdue reminders for all sites.
+ * Secured by CRON_SECRET - set in Vercel env vars.
+ * Vercel sends: Authorization: Bearer <CRON_SECRET>
+ */
+export async function GET(request: Request) {
+  const auth = request.headers.get("authorization");
+  const secret = process.env.CRON_SECRET;
+  if (!secret || auth !== `Bearer ${secret}`) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const admin = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY!,
     { auth: { autoRefreshToken: false, persistSession: false } }
   );
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "manager") return { ok: false as const, status: 403, error: "Manager only" };
-  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
-  if (!site?.id) return { ok: false as const, status: 403, error: "No site" };
-  return { ok: true as const, admin, siteId: site.id, user };
-}
 
-export async function POST() {
-  try {
-    const r = await requireManager();
-    if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
-    const { admin, siteId, user } = r;
+  const { data: sites } = await admin.from("sites").select("id, manager_id").not("manager_id", "is", null);
+  if (!sites?.length) return NextResponse.json({ success: true, sitesProcessed: 0 });
+
+  let totalRecipients = 0;
+  const now = Date.now();
+
+  for (const site of sites as { id: string; manager_id: string }[]) {
+    const siteId = site.id;
+    const managerId = site.manager_id;
 
     const { data: buildings } = await admin.from("buildings").select("id").eq("site_id", siteId);
     const buildingIds = (buildings ?? []).map((b: { id: string }) => b.id);
-    if (!buildingIds.length) return NextResponse.json({ success: true, recipients: 0, message: "No buildings" });
+    if (!buildingIds.length) continue;
 
     const { data: units } = await admin.from("units").select("id").in("building_id", buildingIds);
     const unitIds = (units ?? []).map((u: { id: string }) => u.id);
-    if (!unitIds.length) return NextResponse.json({ success: true, recipients: 0, message: "No units" });
+    if (!unitIds.length) continue;
 
     const { data: unpaidBills } = await admin
       .from("bills")
@@ -39,14 +44,14 @@ export async function POST() {
       .in("unit_id", unitIds)
       .is("paid_at", null)
       .neq("status", "in_process");
-    const now = Date.now();
+
     const overdue30Days = (unpaidBills ?? []).filter((b: { unit_id: string; period_month: number; period_year: number }) => {
       const issueDate = new Date(b.period_year, b.period_month - 1, 1).getTime();
       const overdueDate = issueDate + 30 * 24 * 60 * 60 * 1000;
       return now >= overdueDate;
     });
     const unpaidUnitIds = new Set(overdue30Days.map((b: { unit_id: string }) => b.unit_id));
-    if (unpaidUnitIds.size === 0) return NextResponse.json({ success: true, recipients: 0, message: "No overdue bills" });
+    if (unpaidUnitIds.size === 0) continue;
 
     const { data: owners } = await admin.from("unit_owners").select("unit_id, owner_id").in("unit_id", [...unpaidUnitIds]);
     const { data: assignments } = await admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", [...unpaidUnitIds]);
@@ -59,16 +64,15 @@ export async function POST() {
     const notifyUserIds = new Set<string>();
     billToMap.forEach(uid => notifyUserIds.add(uid));
 
-    const { success, count } = await notifyUsers(
+    const { count } = await notifyUsers(
       admin,
-      user.id,
+      managerId,
       notifyUserIds,
       "Overdue: Please pay your bills",
       "You have unpaid maintenance bills. Please log in to view and pay to avoid late fees."
     );
-
-    return NextResponse.json({ success, recipients: count });
-  } catch (err) {
-    return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
+    totalRecipients += count;
   }
+
+  return NextResponse.json({ success: true, sitesProcessed: sites.length, totalRecipients });
 }

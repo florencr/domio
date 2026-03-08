@@ -337,7 +337,7 @@ export default function ManagerBillingPage() {
                 const lineAmount = line != null ? Number(line.amount) : Number(b.total_amount);
                 return (
                   <tr key={line ? `${b.id}-${lineIndex}` : b.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-xs">{displayRef}</td>
+                    <td className="py-3 pr-4 font-mono text-xs select-text">{displayRef}</td>
                     <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month-1]} {b.period_year}</td>
                     <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>

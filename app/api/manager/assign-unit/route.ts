@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { notifyUsers } from "@/lib/notify-users";
 
 export async function POST(request: Request) {
   try {
@@ -22,12 +23,14 @@ export async function POST(request: Request) {
     const { unitId, ownerId, tenantId } = await request.json();
     if (!unitId) return NextResponse.json({ error: "unitId required" }, { status: 400 });
 
-    const { data: unit } = await admin.from("units").select("id, building_id").eq("id", unitId).single();
+    const { data: unit } = await admin.from("units").select("id, building_id, unit_name").eq("id", unitId).single();
     if (!unit) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
 
     const { data: buildings } = await admin.from("buildings").select("id").eq("site_id", site.id);
     const managerBuildingIds = new Set((buildings ?? []).map((b: { id: string }) => b.id));
     if (!managerBuildingIds.has(unit.building_id)) return NextResponse.json({ error: "Unit not in your site" }, { status: 403 });
+
+    const unitName = (unit as { unit_name?: string }).unit_name ?? "your unit";
 
     if (ownerId) {
       const { data: existing } = await admin.from("unit_owners").select("id").eq("unit_id", unitId).maybeSingle();
@@ -35,6 +38,7 @@ export async function POST(request: Request) {
       const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: ownerId });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       await admin.from("user_site_assignments").delete().eq("user_id", ownerId);
+      await notifyUsers(admin, user.id, new Set([ownerId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
     } else {
       await admin.from("unit_owners").delete().eq("unit_id", unitId);
     }
@@ -44,6 +48,7 @@ export async function POST(request: Request) {
       const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: tenantId, is_payment_responsible: true });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       await admin.from("user_site_assignments").delete().eq("user_id", tenantId);
+      await notifyUsers(admin, user.id, new Set([tenantId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});
     } else {
       await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
     }

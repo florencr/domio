@@ -103,7 +103,7 @@ export default function ManagerPaymentsPage() {
                   const owner = ownerId ? profileMap.get(ownerId) : null;
                   return (
                     <tr key={b.id} className="hover:bg-muted/30">
-                      <td className="py-3 pr-4 font-mono text-xs">{b.reference_code ?? "—"}</td>
+                      <td className="py-3 pr-4 font-mono text-xs select-text">{b.reference_code ?? "—"}</td>
                       <td className="py-3 pr-4 font-medium">{new Date(b.paid_at!).toLocaleDateString()}</td>
                       <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : "—"}</td>

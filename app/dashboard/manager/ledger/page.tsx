@@ -225,7 +225,7 @@ export default function ManagerLedgerPage() {
               <tbody className="divide-y divide-border">
                 {rowsWithBalance.map(r => (
                   <tr key={r.key} className="hover:bg-muted/30">
-                    <td className="py-3 pr-4 font-mono text-xs">{r.ref}</td>
+                    <td className="py-3 pr-4 font-mono text-xs select-text">{r.ref}</td>
                     <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                     <td className="py-3 pr-4">
                       {r.type === "income"

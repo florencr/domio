@@ -324,7 +324,7 @@ export default function ManagerExpensesPage() {
                       </>
                     ) : (
                       <>
-                        <td className="py-3 pr-4 font-mono text-xs">{getDisplayRef(e)}</td>
+                        <td className="py-3 pr-4 font-mono text-xs select-text">{getDisplayRef(e)}</td>
                         <td className="py-3 pr-4 font-medium">{e.period_month != null && e.period_year != null ? `${MONTHS[e.period_month - 1]} ${e.period_year}` : "—"}</td>
                         <td className="py-3 pr-4 text-muted-foreground">{e.category ?? "—"}</td>
                         <td className="py-3 pr-4">{e.title ?? "—"}</td>

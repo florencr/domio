@@ -104,7 +104,7 @@ export default function OwnerLedgerPage() {
           <tbody className="divide-y divide-border">
             {rowsWithBalance.map(r => (
               <tr key={r.key} className="hover:bg-muted/30">
-                <td className="py-3 pr-4 font-mono text-xs">{r.ref}</td>
+                <td className="py-3 pr-4 font-mono text-xs select-text">{r.ref}</td>
                 <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                 <td className="py-3 pr-4">
                   {r.type === "income" ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Bill</span> : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Expense</span>}

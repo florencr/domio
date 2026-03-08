@@ -81,7 +81,7 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
                 <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
                 {data.site?.name != null && <p className="text-sm text-muted-foreground">Site: {data.site.name}</p>}
                 <p className="text-sm text-muted-foreground">{profile?.email}</p>
-                {profile?.phone && <p className="text-sm text-muted-foreground">{profile.phone}</p>}
+                {profile?.phone && <p className="text-sm text-muted-foreground"><a href={`tel:${profile.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{profile.phone}</a></p>}
               </div>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={signOut} className="gap-2 cursor-pointer">
