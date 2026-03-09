@@ -7,8 +7,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import type { UnitType } from "./types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitType[]; onClose: () => void }) {
+  const { locale } = useLocale();
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [targetAudience, setTargetAudience] = useState<"owners" | "tenants" | "both">("both");
@@ -22,7 +25,7 @@ export function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitTy
   };
 
   async function send() {
-    if (!title.trim()) { setMsg({ text: "Enter a title", ok: false }); return; }
+    if (!title.trim()) { setMsg({ text: t(locale, "notifications.enterTitle"), ok: false }); return; }
     setSending(true);
     setMsg({ text: "", ok: true });
     const res = await fetch("/api/notifications/send", {
@@ -39,10 +42,10 @@ export function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitTy
     const json = await res.json().catch(() => ({}));
     setSending(false);
     if (res.ok && json.success) {
-      setMsg({ text: `Sent to ${json.recipients ?? 0} recipients`, ok: true });
+      setMsg({ text: t(locale, "notifications.sentToRecipients", { count: String(json.recipients ?? 0) }), ok: true });
       setTimeout(() => { setTitle(""); setBody(""); setSelectedUnitTypes([]); setUnpaidOnly(false); onClose(); }, 800);
     } else {
-      setMsg({ text: json.error || "Failed to send", ok: false });
+      setMsg({ text: json.error || t(locale, "notifications.failedToSend"), ok: false });
     }
   }
 
@@ -50,32 +53,32 @@ export function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitTy
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
       <Card className="w-full max-w-md m-4" onClick={e => e.stopPropagation()}>
         <CardHeader className="flex flex-row items-center justify-between">
-          <CardTitle>Send new message</CardTitle>
+          <CardTitle>{t(locale, "notifications.sendMessageTitle")}</CardTitle>
           <Button variant="ghost" size="sm" onClick={onClose} className="text-foreground">✕</Button>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label>Title</Label>
-            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder="e.g. Payment reminder" className="mt-1" />
+            <Label>{t(locale, "notifications.messageTitle")}</Label>
+            <Input value={title} onChange={e => setTitle(e.target.value)} placeholder={t(locale, "notifications.messagePlaceholder")} className="mt-1" />
           </div>
           <div>
-            <Label>Message (optional)</Label>
-            <textarea value={body} onChange={e => setBody(e.target.value)} placeholder="Write your message..." rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1" />
+            <Label>{t(locale, "notifications.messageBody")}</Label>
+            <textarea value={body} onChange={e => setBody(e.target.value)} placeholder={t(locale, "notifications.messageBodyPlaceholder")} rows={3} className="flex w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 mt-1" />
           </div>
           <div>
-            <Label>Send to</Label>
+            <Label>{t(locale, "notifications.sendTo")}</Label>
             <Select value={targetAudience} onValueChange={(v: "owners" | "tenants" | "both") => setTargetAudience(v)}>
               <SelectTrigger className="mt-1"><SelectValue /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="owners">Owners only</SelectItem>
-                <SelectItem value="tenants">Tenants only</SelectItem>
-                <SelectItem value="both">Owners and Tenants</SelectItem>
+                <SelectItem value="owners">{t(locale, "notifications.ownersOnly")}</SelectItem>
+                <SelectItem value="tenants">{t(locale, "notifications.tenantsOnly")}</SelectItem>
+                <SelectItem value="both">{t(locale, "notifications.ownersAndTenants")}</SelectItem>
               </SelectContent>
             </Select>
           </div>
           {unitTypes.length > 0 && (
             <div>
-              <Label>Filter by unit type (optional)</Label>
+              <Label>{t(locale, "notifications.filterByUnitType")}</Label>
               <div className="flex flex-wrap gap-2 mt-2">
                 {unitTypes.map(ut => (
                   <button key={ut.id} type="button" onClick={() => toggleUnitType(ut.name)}
@@ -88,12 +91,12 @@ export function SendNotificationForm({ unitTypes, onClose }: { unitTypes: UnitTy
           )}
           <div className="flex items-center gap-2">
             <input type="checkbox" id="unpaid" checked={unpaidOnly} onChange={e => setUnpaidOnly(e.target.checked)} className="rounded" />
-            <Label htmlFor="unpaid" className="cursor-pointer">Only users with unpaid bills</Label>
+            <Label htmlFor="unpaid" className="cursor-pointer">{t(locale, "notifications.onlyUsersWithUnpaidBills")}</Label>
           </div>
           {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
           <div className="flex gap-2">
-            <Button onClick={send} disabled={sending} className="text-white border-0 bg-black hover:bg-black/90">{sending ? "Sending..." : "Send"}</Button>
-            <Button variant="ghost" onClick={onClose}>Close</Button>
+            <Button onClick={send} disabled={sending} className="text-white border-0 bg-black hover:bg-black/90">{sending ? t(locale, "notifications.sending") : t(locale, "notifications.send")}</Button>
+            <Button variant="ghost" onClick={onClose}>{t(locale, "common.close")}</Button>
           </div>
         </CardContent>
       </Card>

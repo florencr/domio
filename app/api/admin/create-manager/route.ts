@@ -51,10 +51,24 @@ export async function POST(request: Request) {
     if (swift_code != null) siteInsert.swift_code = swift_code?.trim() || null;
     if (tax_amount != null && tax_amount !== "") siteInsert.tax_amount = Number(tax_amount);
 
-    const { error: siteErr } = await admin.from("sites").insert(siteInsert);
-    if (siteErr) {
+    let { error: siteErr } = await admin.from("sites").insert(siteInsert);
+    if (siteErr && (siteErr.message?.includes("column") || siteErr.message?.includes("schema"))) {
       const minimalInsert = { name: siteDisplayName, manager_id: authData.user.id, address: siteAddress?.trim() || "" };
-      await admin.from("sites").insert(minimalInsert);
+      const { error: minimalErr } = await admin.from("sites").insert(minimalInsert);
+      if (!minimalErr && (siteInsert.vat_account || siteInsert.bank_name || siteInsert.iban || siteInsert.swift_code || siteInsert.tax_amount != null)) {
+        const { data: newSite } = await admin.from("sites").select("id").eq("manager_id", authData.user.id).maybeSingle();
+        if (newSite?.id) {
+          const updates: Record<string, unknown> = {};
+          if (siteInsert.vat_account != null) updates.vat_account = siteInsert.vat_account;
+          if (siteInsert.bank_name != null) updates.bank_name = siteInsert.bank_name;
+          if (siteInsert.iban != null) updates.iban = siteInsert.iban;
+          if (siteInsert.swift_code != null) updates.swift_code = siteInsert.swift_code;
+          if (siteInsert.tax_amount != null) updates.tax_amount = siteInsert.tax_amount;
+          if (Object.keys(updates).length > 0) await admin.from("sites").update(updates).eq("id", newSite.id);
+        }
+      }
+    } else if (siteErr) {
+      return NextResponse.json({ success: false, error: siteErr.message }, { status: 400 });
     }
 
     return NextResponse.json({ success: true, userId: authData.user.id });

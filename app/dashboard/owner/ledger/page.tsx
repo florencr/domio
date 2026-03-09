@@ -9,9 +9,12 @@ import { Label } from "@/components/ui/label";
 import { SlidersHorizontal } from "lucide-react";
 import { useOwnerData } from "../context";
 import { MONTHS, expenseRef } from "../types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function OwnerLedgerPage() {
   const { data } = useOwnerData();
+  const { locale } = useLocale();
   const [ledgerSortCol, setLedgerSortCol] = useState<string | null>(null);
   const [ledgerSortDir, setLedgerSortDir] = useState<"asc" | "desc">("asc");
   const [filterLedgerPeriod, setFilterLedgerPeriod] = useState("all");
@@ -25,10 +28,10 @@ export default function OwnerLedgerPage() {
   const myBills = bills.filter(b => unitIdSet.has(b.unit_id));
 
   type LedgerRow = { key: string; date: string; type: "income"|"expense"; label: string; ref: string; amount: number; status: string };
-  const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${MONTHS[parseInt(m||"1")-1]} ${y}`; };
+  const periodLabel = (d: string) => { const [y, m] = d.split("-"); return `${t(locale, `common.month${parseInt(m||"1")}`)} ${y}`; };
   const ledgerRows: LedgerRow[] = [
-    ...myBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)?.unit_name ?? "—"} — ${MONTHS[b.period_month-1]} ${b.period_year}`, ref: (b as {reference_code?: string}).reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
-    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: (e as {reference_code?: string}).reference_code ?? expenseRef(e), amount: Number(e.amount), status: "Recurrent" })),
+    ...myBills.map(b => ({ key:`b-${b.id}`, date:`${b.period_year}-${String(b.period_month).padStart(2,"0")}`, type:"income" as const, label:`${unitMap.get(b.unit_id)?.unit_name ?? "—"} — ${t(locale, `common.month${b.period_month}`)} ${b.period_year}`, ref: (b as {reference_code?: string}).reference_code ?? "—", amount: Math.abs(Number(b.total_amount)), status: b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status })),
+    ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: (e as {reference_code?: string}).reference_code ?? expenseRef(e), amount: Number(e.amount), status: (e as {paid_at?: string | null}).paid_at ? "Paid" : "Unpaid" })),
   ];
   const getLedgerValue = (r: LedgerRow & { balance?: number }, col: string): string | number => {
     switch (col) {
@@ -58,8 +61,8 @@ export default function OwnerLedgerPage() {
   return (
     <Card className="mt-2">
       <CardHeader className="flex flex-row items-start justify-between gap-4">
-        <CardTitle>Full Ledger ({ledgerRows.length}{filteredLedgerRows.length !== ledgerRows.length ? ` — showing ${filteredLedgerRows.length}` : ""} entries)</CardTitle>
-        <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowLedgerFilters(v => !v)} aria-label="Toggle filters">
+        <CardTitle>{t(locale, "headers.fullLedger")} ({ledgerRows.length}{filteredLedgerRows.length !== ledgerRows.length ? ` — ${t(locale, "ledger.showing")} ${filteredLedgerRows.length}` : ""} {t(locale, "headers.entries")})</CardTitle>
+        <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowLedgerFilters(v => !v)} aria-label={t(locale, "common.toggleFilters")}>
           <SlidersHorizontal className="size-4" />
         </Button>
       </CardHeader>
@@ -67,39 +70,39 @@ export default function OwnerLedgerPage() {
         <div className={`grid transition-[grid-template-rows] duration-200 ${showLedgerFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
           <div className="min-h-0 overflow-hidden">
             <div className="flex flex-wrap gap-2 items-end pb-3">
-              <div><Label className="text-xs">Period</Label>
+              <div><Label className="text-xs">{t(locale, "table.period")}</Label>
                 <Select value={filterLedgerPeriod} onValueChange={setFilterLedgerPeriod}>
                   <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All periods</SelectItem>
-                    {[...new Set(ledgerRows.map(r => r.date.slice(0,7)))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem> })}
+                  <SelectContent><SelectItem value="all">{t(locale, "filters.allPeriods")}</SelectItem>
+                    {[...new Set(ledgerRows.map(r => r.date.slice(0,7)))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{t(locale, `common.month${parseInt(m)}`)} {y}</SelectItem> })}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Type</Label>
+              <div><Label className="text-xs">{t(locale, "table.type")}</Label>
                 <Select value={filterLedgerType} onValueChange={setFilterLedgerType}>
                   <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="all">{t(locale, "common.all")}</SelectItem><SelectItem value="income">{t(locale, "tenant.income")}</SelectItem><SelectItem value="expense">{t(locale, "tenant.expense")}</SelectItem></SelectContent>
                 </Select>
               </div>
-              <div><Label className="text-xs">Status</Label>
+              <div><Label className="text-xs">{t(locale, "table.status")}</Label>
                 <Select value={filterLedgerStatus} onValueChange={setFilterLedgerStatus}>
                   <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="Paid">Paid</SelectItem><SelectItem value="Unpaid">Unpaid</SelectItem><SelectItem value="In process">In process</SelectItem><SelectItem value="Recurrent">Recurrent</SelectItem></SelectContent>
+                  <SelectContent><SelectItem value="all">{t(locale, "common.all")}</SelectItem><SelectItem value="Paid">{t(locale, "filters.paid")}</SelectItem><SelectItem value="Unpaid">{t(locale, "filters.unpaid")}</SelectItem><SelectItem value="In process">{t(locale, "filters.inProcess")}</SelectItem></SelectContent>
                 </Select>
               </div>
             </div>
           </div>
         </div>
         <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[600px]">
+        <table className="w-full min-w-full text-sm table-fixed">
           <thead><tr className="border-b text-left">
-            <SortableTh column="ref" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
-            <SortableTh column="date" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
-            <SortableTh column="type" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
-            <SortableTh column="label" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Description</SortableTh>
-            <SortableTh column="status" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
-            <SortableTh column="amount" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">Amount</SortableTh>
-            <SortableTh column="balance" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground text-right" align="right">Running Balance</SortableTh>
+            <SortableTh column="ref" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
+            <SortableTh column="date" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
+            <SortableTh column="type" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.type")}</SortableTh>
+            <SortableTh column="label" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.description")}</SortableTh>
+            <SortableTh column="status" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
+            <SortableTh column="amount" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
+            <SortableTh column="balance" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.runningBalance")}</SortableTh>
           </tr></thead>
           <tbody className="divide-y divide-border">
             {rowsWithBalance.map(r => (
@@ -107,15 +110,15 @@ export default function OwnerLedgerPage() {
                 <td className="py-3 pr-4 font-mono text-xs select-text">{r.ref}</td>
                 <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                 <td className="py-3 pr-4">
-                  {r.type === "income" ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Bill</span> : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Expense</span>}
+                  {r.type === "income" ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "tenant.bill")}</span> : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "tenant.expense")}</span>}
                 </td>
                 <td className="py-3 pr-4">{r.label}</td>
-                <td className="py-3 pr-4 text-muted-foreground text-xs capitalize">{r.status}</td>
+                <td className="py-3 pr-4 text-muted-foreground text-xs capitalize">{r.status === "Paid" ? t(locale, "filters.paid") : r.status === "Unpaid" ? t(locale, "filters.unpaid") : r.status === "In process" ? t(locale, "filters.inProcess") : r.status === "Recurrent" ? t(locale, "manager.recurrent") : r.status}</td>
                 <td className={`py-3 pr-4 text-right font-semibold ${r.type==="income"?"text-green-600":"text-red-600"}`}>{r.type==="income"?"+":"-"}{r.amount.toFixed(2)}</td>
                 <td className={`py-3 text-right font-mono text-sm ${r.balance!>=0?"text-blue-600":"text-red-600"}`}>{r.balance!.toFixed(2)}</td>
               </tr>
             ))}
-            {(ledgerRows.length === 0 || rowsWithBalance.length === 0) && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{ledgerRows.length === 0 ? "No transactions yet." : "No transactions match filters."}</td></tr>}
+            {(ledgerRows.length === 0 || rowsWithBalance.length === 0) && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{ledgerRows.length === 0 ? t(locale, "tenant.noTransactionsYet") : t(locale, "tenant.noTransactionsMatchFilters")}</td></tr>}
           </tbody>
         </table>
         </div>

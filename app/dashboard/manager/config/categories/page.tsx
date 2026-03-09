@@ -6,15 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useManagerData } from "../../context";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function ConfigCategoriesPage() {
+  const { locale } = useLocale();
   const { data, load, loading } = useManagerData();
   const [newName, setNewName] = useState("");
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editName, setEditName] = useState("");
 
-  if (loading) return <p className="text-muted-foreground">Loading...</p>;
+  if (loading) return <p className="text-muted-foreground">{t(locale, "common.loading")}</p>;
 
   const serviceCountMap = new Map<string, number>();
   data.services.forEach(s => {
@@ -27,11 +30,11 @@ export default function ConfigCategoriesPage() {
     const r = await fetch("/api/manager/service-categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: newName }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMsg({ text: "Category created.", ok: true });
+      setMsg({ text: t(locale, "configCategories.categoryCreated"), ok: true });
       setNewName("");
       load();
     } else {
-      setMsg({ text: j.error ?? r.statusText ?? "Failed", ok: false });
+      setMsg({ text: j.error ?? r.statusText ?? t(locale, "common.failed"), ok: false });
     }
   }
 
@@ -39,27 +42,27 @@ export default function ConfigCategoriesPage() {
     const r = await fetch("/api/manager/service-categories", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, name: editName }) });
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMsg({ text: "Updated.", ok: true });
+      setMsg({ text: t(locale, "configExpenses.updated"), ok: true });
       setEditingId(null);
       load();
     } else {
-      setMsg({ text: j.error ?? r.statusText ?? "Failed", ok: false });
+      setMsg({ text: j.error ?? r.statusText ?? t(locale, "common.failed"), ok: false });
     }
   }
 
   async function del(id: string, name: string) {
     const count = serviceCountMap.get(name) ?? 0;
     if (count > 0) {
-      setMsg({ text: `Cannot delete — used in ${count} service${count !== 1 ? "s" : ""}.`, ok: false });
+      setMsg({ text: t(locale, "configCategories.cannotDeleteUsedInServices", { count: String(count) }), ok: false });
       return;
     }
     const r = await fetch(`/api/manager/service-categories?id=${encodeURIComponent(id)}`, { method: "DELETE" });
     const j = await r.json().catch(() => ({}));
     if (r.ok) {
-      setMsg({ text: "Deleted.", ok: true });
+      setMsg({ text: t(locale, "configExpenses.deleted"), ok: true });
       load();
     } else {
-      setMsg({ text: j.error ?? r.statusText ?? "Failed", ok: false });
+      setMsg({ text: j.error ?? r.statusText ?? t(locale, "common.failed"), ok: false });
     }
   }
 
@@ -67,25 +70,25 @@ export default function ConfigCategoriesPage() {
     <div className="space-y-4">
       <Card>
         <CardHeader>
-          <CardTitle>Service Categories ({data.serviceCategories.length})</CardTitle>
-          <p className="text-xs text-muted-foreground mt-1">Categories for grouping services (e.g. Maintenance, Utilities). Used in Services config.</p>
+          <CardTitle>{t(locale, "configCategories.serviceCategories")} ({data.serviceCategories.length})</CardTitle>
+          <p className="text-xs text-muted-foreground mt-1">{t(locale, "configCategories.categoryDescription")}</p>
         </CardHeader>
         <CardContent className="space-y-4">
           {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>}
           <form onSubmit={create} className="flex gap-2 items-end">
             <div className="flex-1 max-w-xs">
-              <Label className="text-xs">Category Name</Label>
-              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder="e.g. Maintenance, Utilities" required className="h-8 text-sm mt-1" />
+              <Label className="text-xs">{t(locale, "configCategories.categoryName")}</Label>
+              <Input value={newName} onChange={e => setNewName(e.target.value)} placeholder={t(locale, "configCategories.categoryPlaceholder")} required className="h-8 text-sm mt-1" />
             </div>
-            <Button type="submit" size="sm">Add</Button>
+            <Button type="submit" size="sm">{t(locale, "common.add")}</Button>
           </form>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <table className="w-full min-w-full text-sm table-fixed">
               <thead>
                 <tr className="border-b bg-muted/40">
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Category Name</th>
-                  <th className="px-4 py-3 text-center font-medium text-muted-foreground">Used in Services</th>
-                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">Actions</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "configCategories.categoryName")}</th>
+                  <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t(locale, "configCategories.usedInServices")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.actions")}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
@@ -108,15 +111,15 @@ export default function ConfigCategoriesPage() {
                       <td className="px-4 py-3">
                         {isEditing ? (
                           <div className="flex gap-1">
-                            <Button size="sm" className="h-7 px-3 text-xs" onClick={() => save(c.id)}>Save</Button>
-                            <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => setEditingId(null)}>Cancel</Button>
+                            <Button size="sm" className="h-7 px-3 text-xs" onClick={() => save(c.id)}>{t(locale, "common.save")}</Button>
+                            <Button size="sm" variant="outline" className="h-7 px-3 text-xs" onClick={() => setEditingId(null)}>{t(locale, "common.cancel")}</Button>
                           </div>
                         ) : (
                           <div className="flex gap-1">
-                            <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => { setEditingId(c.id); setEditName(c.name); }}>Edit</Button>
+                            <Button size="sm" variant="ghost" className="h-7 px-3 text-xs" onClick={() => { setEditingId(c.id); setEditName(c.name); }}>{t(locale, "common.edit")}</Button>
                             {inUse
-                              ? <span className="text-xs text-muted-foreground/50 px-2 py-1">In use</span>
-                              : <Button size="sm" variant="ghost" className="h-7 px-3 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => del(c.id, c.name)}>Delete</Button>}
+                              ? <span className="text-xs text-muted-foreground/50 px-2 py-1">{t(locale, "configCategories.inUse")}</span>
+                              : <Button size="sm" variant="ghost" className="h-7 px-3 text-xs text-red-500 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30" onClick={() => del(c.id, c.name)}>{t(locale, "common.delete")}</Button>}
                           </div>
                         )}
                       </td>
@@ -124,7 +127,7 @@ export default function ConfigCategoriesPage() {
                   );
                 })}
                 {!data.serviceCategories.length && (
-                  <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">No categories yet. Add one above.</td></tr>
+                  <tr><td colSpan={3} className="px-4 py-8 text-center text-muted-foreground">{t(locale, "configCategories.noCategoriesYet")}</td></tr>
                 )}
               </tbody>
             </table>

@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/client";
 
 export type Site = { id: string; name: string; address?: string; manager_id: string; created_at?: string; vat_account?: string | null; bank_name?: string | null; iban?: string | null; swift_code?: string | null; tax_amount?: number | null };
 export type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null };
-export type Building = { id: string; name: string; address?: string; site_id: string | null };
+export type Building = { id: string; name: string; address?: string; site_id: string | null; site_name?: string | null; manager_id?: string | null; manager_name?: string | null; owner_names?: string | null };
 
 export type AdminData = {
   profile: Profile | null;

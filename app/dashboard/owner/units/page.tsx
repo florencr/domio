@@ -6,21 +6,26 @@ import { SortableTh, sortBy } from "@/components/ui/sortable-th";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useOwnerData } from "../context";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function OwnerUnitsPage() {
-  const { data, assignTenant, removeTenant } = useOwnerData();
+  const { data, assignTenant, removeTenant, setPaymentResponsible } = useOwnerData();
+  const { locale } = useLocale();
   const [unitsSortCol, setUnitsSortCol] = useState<string | null>(null);
   const [unitsSortDir, setUnitsSortDir] = useState<"asc" | "desc">("asc");
 
   const { profile, units, buildings, unitTenantAssignments, tenants } = data;
   const buildingMap = new Map(buildings.map(b => [b.id, b.name]));
   const tenantMap = new Map(tenants.map(t => [t.id, t]));
-  const unitTenantsMap = new Map<string, { unit_id: string; tenant_id: string }[]>();
+  const unitTenantsMap = new Map<string, { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[]>();
   unitTenantAssignments.forEach(a => {
     const list = unitTenantsMap.get(a.unit_id) ?? [];
     list.push(a);
     unitTenantsMap.set(a.unit_id, list);
   });
+  const [addResponsibleForPayment, setAddResponsibleForPayment] = useState(true);
+  const [assignError, setAssignError] = useState<string | null>(null);
 
   const getUnitValue = (u: { id: string; unit_name: string; building_id: string; type: string; size_m2: number | null }, col: string): string | number => {
     const assigned = unitTenantsMap.get(u.id) ?? [];
@@ -37,18 +42,38 @@ export default function OwnerUnitsPage() {
   const sortedUnits = unitsSortCol ? sortBy(units, unitsSortCol, unitsSortDir, (u, c) => getUnitValue(u, c)) : units;
   const handleUnitsSort = (col: string) => { setUnitsSortDir(prev => unitsSortCol === col && prev === "asc" ? "desc" : "asc"); setUnitsSortCol(col); };
 
+  async function handleAssignTenant(unitId: string, tenantId: string) {
+    setAssignError(null);
+    const res = await assignTenant(unitId, tenantId, addResponsibleForPayment);
+    if (!res.ok && res.error) setAssignError(res.error);
+  }
+
   return (
     <div className="space-y-4 mt-2">
+      {assignError && <p className="text-sm text-red-600">{assignError}</p>}
       <Card>
-        <CardHeader><CardTitle>My Units ({units.length})</CardTitle></CardHeader>
-        <CardContent className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[500px]">
+        <CardHeader><CardTitle>{t(locale, "headers.myUnits")} ({units.length})</CardTitle></CardHeader>
+        <CardContent className="overflow-x-auto w-full">
+          <table className="w-full min-w-full text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "18%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "14%" }} />
+              <col style={{ width: "12%" }} />
+            </colgroup>
             <thead><tr className="border-b text-left">
-              <SortableTh column="unit" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
-              <SortableTh column="building" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Building</SortableTh>
-              <SortableTh column="type" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
-              <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-center">m²</SortableTh>
-              <SortableTh column="tenant" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 font-medium text-muted-foreground">Tenant</SortableTh>
+              <SortableTh column="unit" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
+              <SortableTh column="building" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.building")}</SortableTh>
+              <SortableTh column="type" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.type")}</SortableTh>
+              <SortableTh column="entrance" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.entrance")}</SortableTh>
+              <SortableTh column="floor" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.floor")}</SortableTh>
+              <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.sizeM2")}</SortableTh>
+              <SortableTh column="tenant" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.tenant")}</SortableTh>
+              <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "common.actions")}</th>
             </tr></thead>
             <tbody className="divide-y divide-border">
               {sortedUnits.map(u => {
@@ -58,37 +83,59 @@ export default function OwnerUnitsPage() {
                     <td className="py-3 pr-4 font-medium">{u.unit_name}</td>
                     <td className="py-3 pr-4 text-muted-foreground">{buildingMap.get(u.building_id) ?? "—"}</td>
                     <td className="py-3 pr-4"><span className="text-xs bg-muted px-2 py-0.5 rounded-full">{u.type}</span></td>
+                    <td className="py-3 pr-4 text-center text-muted-foreground">{(u as { entrance?: string | null }).entrance ?? "—"}</td>
+                    <td className="py-3 pr-4 text-center text-muted-foreground">{(u as { floor?: string | null }).floor ?? "—"}</td>
                     <td className="py-3 pr-4 text-center">{u.size_m2 ?? "—"}</td>
-                    <td className="py-3">
+                    <td className="py-3 pr-4">
                       <div className="flex flex-col gap-1">
                         {assigned.map(a => {
-                          const t = tenantMap.get(a.tenant_id);
-                          return t ? (
-                            <div key={a.tenant_id} className="flex items-center gap-2">
-                              <span className="text-sm">{t.name} {t.surname}</span>
-                              <Button size="sm" variant="ghost" className="h-6 text-xs text-red-600" onClick={() => removeTenant(u.id, a.tenant_id)}>Remove</Button>
+                          const tenant = tenantMap.get(a.tenant_id);
+                          const isResp = a.is_payment_responsible !== false;
+                          return tenant ? (
+                            <div key={a.tenant_id} className="flex flex-col gap-1">
+                              <span className="text-sm">{tenant.name} {tenant.surname}</span>
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={isResp} onChange={(e) => setPaymentResponsible(u.id, a.tenant_id, e.target.checked)} className="rounded border-input size-4" />
+                                <span className="text-xs text-muted-foreground">{t(locale, "owner.responsibleForPayment")}</span>
+                              </label>
                             </div>
                           ) : null;
                         })}
+                        {assigned.length === 0 && tenants.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                        {assigned.length === 0 && tenants.length > 0 && <span className="text-xs text-muted-foreground">—</span>}
+                      </div>
+                    </td>
+                    <td className="py-3 pr-4">
+                      <div className="flex flex-col gap-1">
+                        {assigned.map(a => {
+                          const tenant = tenantMap.get(a.tenant_id);
+                          return tenant ? (
+                            <Button key={a.tenant_id} size="sm" variant="ghost" className="h-6 text-xs text-red-600 w-fit" onClick={() => removeTenant(u.id, a.tenant_id)}>{t(locale, "owner.remove")}</Button>
+                          ) : null;
+                        })}
                         {tenants.length > 0 ? (
-                          (() => { const avail = tenants.filter(t => !assigned.some(a => a.tenant_id === t.id)); return avail.length > 0 && (
-                            <div className="flex items-center gap-2 mt-0.5">
-                              <Select onValueChange={(v) => { if (v && v !== "none") assignTenant(u.id, v); }}>
-                                <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder="+ Assign tenant" /></SelectTrigger>
+                          (() => { const avail = tenants.filter(tn => !assigned.some(a => a.tenant_id === tn.id)); return avail.length > 0 && (
+                            <div className="flex flex-col gap-1">
+                              <label className="flex items-center gap-1.5 cursor-pointer">
+                                <input type="checkbox" checked={addResponsibleForPayment} onChange={(e) => setAddResponsibleForPayment(e.target.checked)} className="rounded border-input size-4" />
+                                <span className="text-xs text-muted-foreground">{t(locale, "owner.responsibleForPayment")}</span>
+                              </label>
+                              <Select onValueChange={(v) => { if (v && v !== "none") handleAssignTenant(u.id, v); }}>
+                                <SelectTrigger className="h-7 w-40 text-xs"><SelectValue placeholder={t(locale, "owner.assignTenant")} /></SelectTrigger>
                                 <SelectContent>
-                                  <SelectItem value="none">— Select —</SelectItem>
-                                  {avail.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.surname}</SelectItem>)}
+                                  <SelectItem value="none">{t(locale, "owner.selectOption")}</SelectItem>
+                                  {avail.map(tn => <SelectItem key={tn.id} value={tn.id}>{tn.name} {tn.surname}</SelectItem>)}
                                 </SelectContent>
                               </Select>
                             </div>
                           ); })()
-                        ) : <span className="text-xs text-muted-foreground">No tenant users. Ask manager to create.</span>}
+                        ) : assigned.length === 0 && <span className="text-xs text-muted-foreground">{t(locale, "owner.noTenantUsers")}</span>}
                       </div>
                     </td>
                   </tr>
                 );
               })}
-              {!units.length && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">No units assigned to you.</td></tr>}
+              {!units.length && <tr><td colSpan={8} className="py-8 text-center text-muted-foreground">{t(locale, "owner.noUnitsAssigned")}</td></tr>}
             </tbody>
           </table>
         </CardContent>

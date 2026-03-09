@@ -10,9 +10,12 @@ import { Label } from "@/components/ui/label";
 import { FileText, Download, Camera, SlidersHorizontal } from "lucide-react";
 import { useOwnerData } from "../context";
 import { MONTHS } from "../types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function OwnerBillingPage() {
   const { data, triggerFileInput, uploadingFor, uploadError, setUploadError } = useOwnerData();
+  const { locale } = useLocale();
   const [billsSortCol, setBillsSortCol] = useState<string | null>(null);
   const [billsSortDir, setBillsSortDir] = useState<"asc" | "desc">("asc");
   const [filterPeriod, setFilterPeriod] = useState("all");
@@ -34,14 +37,14 @@ export default function OwnerBillingPage() {
 
   const getOwnerBillValue = (b: typeof myBills[0], col: string): string | number => {
     const payerId = unitResponsibleTenantMap.get(b.unit_id) ?? profile?.id ?? "_owner";
-    const billToName = payerId === profile?.id || payerId === "_owner" ? "You" : (tenantMap.get(payerId) ? `${tenantMap.get(payerId)!.name} ${tenantMap.get(payerId)!.surname}` : "—");
+    const billToName = payerId === profile?.id || payerId === "_owner" ? t(locale, "common.you") : (tenantMap.get(payerId) ? `${tenantMap.get(payerId)!.name} ${tenantMap.get(payerId)!.surname}` : "—");
     switch (col) {
       case "ref": return ((b as { reference_code?: string }).reference_code ?? "") as string;
       case "period": return b.period_year * 100 + b.period_month;
       case "billTo": return billToName as string;
       case "unit": return (unitMap.get(b.unit_id)?.unit_name ?? "") as string;
       case "amount": return Math.abs(Number(b.total_amount));
-      case "status": return (b.paid_at ? "Paid" : b.status) as string;
+      case "status": return (b.paid_at ? t(locale, "filters.paid") : b.status === "in_process" ? t(locale, "filters.inProcess") : b.status) as string;
       case "paidOn": return b.paid_at ? new Date(b.paid_at).getTime() : 0;
       default: return "";
     }
@@ -85,10 +88,10 @@ export default function OwnerBillingPage() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>My Bills ({myBills.length}{sortedBillsForDisplay.length !== myBills.length ? ` — showing ${sortedBillsForDisplay.length}` : ""})</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">One PDF and one slip per (period, payer). Actions apply to all bills in that group.</p>
+            <CardTitle>{t(locale, "headers.myBills")} ({myBills.length}{sortedBillsForDisplay.length !== myBills.length ? ` — showing ${sortedBillsForDisplay.length}` : ""})</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">{t(locale, "headers.myBillsDescription")}</p>
           </div>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowBillingFilters(v => !v)} aria-label="Toggle filters">
+            <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowBillingFilters(v => !v)} aria-label={t(locale, "common.toggleFilters")}>
             <SlidersHorizontal className="size-4" />
           </Button>
         </CardHeader>
@@ -96,47 +99,47 @@ export default function OwnerBillingPage() {
           <div className={`grid transition-[grid-template-rows] duration-200 ${showBillingFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
             <div className="min-h-0 overflow-hidden">
               <div className="flex flex-wrap gap-2 items-end pb-3">
-                <div><Label className="text-xs">Period</Label>
+                <div><Label className="text-xs">{t(locale, "table.period")}</Label>
                   <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                     <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All periods</SelectItem>
-                      {[...new Set(myBills.map(b => `${b.period_year}-${b.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m)-1]} {y}</SelectItem> })}
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allPeriods")}</SelectItem>
+                      {[...new Set(myBills.map(b => `${b.period_year}-${b.period_month}`))].sort((a,b)=>b.localeCompare(a)).slice(0,24).map(k => { const [y,m]=k.split("-"); return <SelectItem key={k} value={k}>{t(locale, `common.month${parseInt(m)}`)} {y}</SelectItem> })}
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit type</Label>
+                <div><Label className="text-xs">{t(locale, "table.unitType")}</Label>
                   <Select value={filterUnitType} onValueChange={setFilterUnitType}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All types</SelectItem>{[...new Set(units.map(u=>u.type))].map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allTypes")}</SelectItem>{[...new Set(units.map(u=>u.type))].map(t=><SelectItem key={t} value={t}>{t}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit</Label>
+                <div><Label className="text-xs">{t(locale, "table.unit")}</Label>
                   <Select value={filterUnitId} onValueChange={setFilterUnitId}>
                     <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allUnits")}</SelectItem>{units.map(u=><SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Status</Label>
+                <div><Label className="text-xs">{t(locale, "table.status")}</Label>
                   <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem><SelectItem value="in_process">In process</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "common.all")}</SelectItem><SelectItem value="paid">{t(locale, "filters.paid")}</SelectItem><SelectItem value="unpaid">{t(locale, "filters.unpaid")}</SelectItem><SelectItem value="in_process">{t(locale, "filters.inProcess")}</SelectItem></SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
           </div>
           <div className="overflow-x-auto">
-          <table className="w-full text-sm min-w-[500px]">
+          <table className="w-full min-w-full text-sm table-fixed">
             <thead><tr className="border-b text-left">
-              <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
-              <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
-              <SortableTh column="billTo" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Bill to</SortableTh>
-              <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
-              <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">Amount</SortableTh>
-              <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
-              <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">Paid on</SortableTh>
-              <th className="pb-3 pr-4 font-medium text-muted-foreground">Invoice</th>
-              <th className="pb-3 font-medium text-muted-foreground">Action</th>
+              <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
+              <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
+              <SortableTh column="billTo" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.billTo")}</SortableTh>
+              <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
+              <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
+              <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
+              <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
+              <th className="pb-3 pr-4 font-medium text-muted-foreground">PDF</th>
+              <th className="pb-3 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
             </tr></thead>
             <tbody className="divide-y divide-border">
               {(() => {
@@ -147,18 +150,18 @@ export default function OwnerBillingPage() {
                   const billsInGroup = byPeriodAndPayer.get(groupKey) ?? [];
                   const isFirstInGroup = !seenGroup.has(groupKey);
                   if (isFirstInGroup) seenGroup.add(groupKey);
-                  const billToName = payerId === ownerId || payerId === "_owner" ? "You" : (tenantMap.get(payerId) ? `${tenantMap.get(payerId)!.name} ${tenantMap.get(payerId)!.surname}` : "—");
+                  const billToName = payerId === ownerId || payerId === "_owner" ? t(locale, "common.you") : (tenantMap.get(payerId) ? `${tenantMap.get(payerId)!.name} ${tenantMap.get(payerId)!.surname}` : "—");
                   const anyReceipt = billsInGroup.some(x => x.receipt_url || x.receipt_path);
                   const uploadKey = `${b.period_month}-${b.period_year}-${payerId}`;
                   return (
                     <tr key={b.id} className="hover:bg-muted/30">
                       <td className="py-3 pr-4 font-mono text-xs select-text">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
-                      <td className="py-3 pr-4 font-medium">{MONTHS[b.period_month - 1]} {b.period_year}</td>
+                      <td className="py-3 pr-4 font-medium">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
                       <td className="py-3 pr-4 font-medium">{billToName}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
                       <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
                       <td className="py-3 pr-4">
-                        {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ Paid</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">In process</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">Unpaid</span>}
+                        {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ {t(locale, "filters.paid")}</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.inProcess")}</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.unpaid")}</span>}
                       </td>
                       <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
                       <td className="py-3 pr-4">
@@ -174,7 +177,7 @@ export default function OwnerBillingPage() {
                             )}
                             {!b.paid_at && (
                               <Button size="sm" variant="outline" className="h-7 text-xs w-fit" disabled={!!uploadingFor} onClick={() => triggerFileInput({ periodMonth: b.period_month, periodYear: b.period_year, paymentResponsibleId: payerId })}>
-                                {uploadingFor === uploadKey ? "Uploading..." : <><Camera className="size-3 mr-1" /> {anyReceipt ? "Upload new slip" : "Upload slip"}</>}
+                                {uploadingFor === uploadKey ? t(locale, "owner.uploading") : <><Camera className="size-3 mr-1" /> {anyReceipt ? t(locale, "owner.uploadNewSlip") : t(locale, "owner.uploadSlip")}</>}
                               </Button>
                             )}
                           </div>
@@ -184,7 +187,7 @@ export default function OwnerBillingPage() {
                   );
                 });
               })()}
-              {(myBills.length === 0 || sortedBillsForDisplay.length === 0) && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">{myBills.length === 0 ? "No bills yet." : "No bills match filters."}</td></tr>}
+              {(myBills.length === 0 || sortedBillsForDisplay.length === 0) && <tr><td colSpan={9} className="py-8 text-center text-muted-foreground">{myBills.length === 0 ? t(locale, "owner.noBillsYet") : t(locale, "owner.noBillsMatchFilters")}</td></tr>}
             </tbody>
           </table>
           </div>

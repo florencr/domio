@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAdminData } from "../context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,16 +9,28 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function AdminBuildingsPage() {
   const searchParams = useSearchParams();
-  const { sites, buildings, load, msg, setMsg } = useAdminData();
+  const { locale } = useLocale();
+  const { sites, managers, buildings, load, msg, setMsg } = useAdminData();
   const [showCreateBuilding, setShowCreateBuilding] = useState(false);
   const [buildingForm, setBuildingForm] = useState({ siteId: "", name: "" });
   const [editingBuildingId, setEditingBuildingId] = useState<string | null>(null);
   const [buildingEditForm, setBuildingEditForm] = useState({ name: "" });
+  const [filterSiteId, setFilterSiteId] = useState<string>("all");
+  const [filterManagerId, setFilterManagerId] = useState<string>("all");
 
   const siteMap = new Map(sites.map(s => [s.id, s]));
+  const filteredBuildings = useMemo(() => {
+    return buildings.filter(b => {
+      if (filterSiteId !== "all" && b.site_id !== filterSiteId) return false;
+      if (filterManagerId !== "all" && b.manager_id !== filterManagerId) return false;
+      return true;
+    });
+  }, [buildings, filterSiteId, filterManagerId]);
 
   useEffect(() => {
     const editParam = searchParams.get("edit");
@@ -41,7 +53,7 @@ export default function AdminBuildingsPage() {
     });
     const json = await res.json();
     if (res.ok && json.success) {
-      setMsg({ text: "Building created.", ok: true });
+      setMsg({ text: t(locale, "admin.buildingCreated"), ok: true });
       setBuildingForm({ siteId: "", name: "" });
       setShowCreateBuilding(false);
       load();
@@ -61,7 +73,7 @@ export default function AdminBuildingsPage() {
     });
     const json = await res.json();
     if (res.ok && json.success) {
-      setMsg({ text: "Building updated.", ok: true });
+      setMsg({ text: t(locale, "admin.buildingUpdated"), ok: true });
       setEditingBuildingId(null);
       load();
     } else {
@@ -78,7 +90,7 @@ export default function AdminBuildingsPage() {
     });
     const json = await res.json();
     if (res.ok && json.success) {
-      setMsg({ text: "Building assigned to site.", ok: true });
+      setMsg({ text: t(locale, "admin.buildingAssigned"), ok: true });
       load();
     } else {
       setMsg({ text: json.error || "Failed", ok: false });
@@ -91,63 +103,102 @@ export default function AdminBuildingsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Buildings</CardTitle>
-            <p className="text-sm text-muted-foreground">Buildings belong to sites. Create and assign later if needed.</p>
+            <CardTitle>{t(locale, "nav.admin.buildings")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t(locale, "admin.buildingsDescription")}</p>
           </div>
           <Button onClick={() => { setShowCreateBuilding(!showCreateBuilding); setEditingBuildingId(null); }} variant={showCreateBuilding ? "outline" : "default"}>
-            <Plus className="size-4 mr-1" />{showCreateBuilding ? "Cancel" : "Create Building"}
+            <Plus className="size-4 mr-1" />{showCreateBuilding ? t(locale, "common.cancel") : t(locale, "admin.createBuilding")}
           </Button>
         </CardHeader>
         <CardContent>
           {showCreateBuilding && (
             <form onSubmit={createBuilding} className="grid gap-3 p-4 border rounded-lg mb-4">
-              <div><Label>Site (optional)</Label>
+              <div><Label>{t(locale, "common.site")} ({t(locale, "common.optional")})</Label>
                 <Select value={buildingForm.siteId || "__none__"} onValueChange={v => setBuildingForm({ ...buildingForm, siteId: v === "__none__" ? "" : v })}>
-                  <SelectTrigger><SelectValue placeholder="Leave unassigned" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t(locale, "admin.unassigned")} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="__none__">— Unassigned —</SelectItem>
+                    <SelectItem value="__none__">— {t(locale, "admin.unassigned")} —</SelectItem>
                     {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Building name</Label><Input value={buildingForm.name} onChange={e => setBuildingForm({ ...buildingForm, name: e.target.value })} placeholder="e.g. Tower A" required /></div>
-              <Button type="submit">Create Building</Button>
+              <div><Label>{t(locale, "common.name")}</Label><Input value={buildingForm.name} onChange={e => setBuildingForm({ ...buildingForm, name: e.target.value })} placeholder="e.g. Tower A" required /></div>
+              <Button type="submit">{t(locale, "admin.createBuilding")}</Button>
             </form>
           )}
           {editingBuildingId && (
             <form onSubmit={updateBuilding} className="grid gap-3 p-4 border rounded-lg mb-4 bg-muted/30">
-              <p className="text-sm font-medium">Edit building</p>
-              <div><Label>Building name</Label><Input value={buildingEditForm.name} onChange={e => setBuildingEditForm({ ...buildingEditForm, name: e.target.value })} required /></div>
+              <p className="text-sm font-medium">{t(locale, "admin.editBuilding")}</p>
+              <div><Label>{t(locale, "common.name")}</Label><Input value={buildingEditForm.name} onChange={e => setBuildingEditForm({ ...buildingEditForm, name: e.target.value })} required /></div>
               <div className="flex gap-2">
-                <Button type="submit">Save</Button>
-                <Button type="button" variant="outline" onClick={() => setEditingBuildingId(null)}>Cancel</Button>
+                <Button type="submit">{t(locale, "common.save")}</Button>
+                <Button type="button" variant="outline" onClick={() => setEditingBuildingId(null)}>{t(locale, "common.cancel")}</Button>
               </div>
             </form>
           )}
-          <div className="space-y-2">
-            {buildings.map(b => {
-              const site = b.site_id ? siteMap.get(b.site_id) : null;
-              return (
-                <div key={b.id} className="flex items-center justify-between py-2 px-3 rounded-lg border bg-card">
-                  <div>
-                    <p className="font-medium">{b.name}</p>
-                    <p className="text-sm text-muted-foreground">{site ? `Site: ${site.name}` : "Unassigned"}</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Select value={b.site_id || "__none__"} onValueChange={v => assignBuildingToSite(b.id, v === "__none__" ? null : v)}>
-                      <SelectTrigger className="w-[160px] h-8"><SelectValue placeholder="Assign site" /></SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="__none__">— Unassigned —</SelectItem>
-                        {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="sm" onClick={() => { setShowCreateBuilding(false); setEditingBuildingId(b.id); setBuildingEditForm({ name: b.name }); }}><Pencil className="size-4 mr-1" />Edit</Button>
-                  </div>
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">{t(locale, "admin.filterBySite")}</Label>
+              <Select value={filterSiteId} onValueChange={setFilterSiteId}>
+                <SelectTrigger className="w-[180px] h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t(locale, "admin.allSites")}</SelectItem>
+                  <SelectItem value="__none__">— {t(locale, "admin.unassigned")} —</SelectItem>
+                  {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">{t(locale, "admin.filterByManager")}</Label>
+              <Select value={filterManagerId} onValueChange={setFilterManagerId}>
+                <SelectTrigger className="w-[180px] h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t(locale, "common.all")}</SelectItem>
+                  {managers.map(m => (
+                    <SelectItem key={m.id} value={m.id}>{m.name} {m.surname}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          {!buildings.length && <p className="py-6 text-center text-muted-foreground">No buildings yet.</p>}
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "table.building")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.site")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.manager")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.owner")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.action")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredBuildings.map(b => (
+                  <tr key={b.id} className="border-b last:border-0 hover:bg-muted/20">
+                    <td className="px-4 py-3 font-medium">{b.name}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{b.site_name ?? t(locale, "admin.unassigned")}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{b.manager_name ?? "—"}</td>
+                    <td className="px-4 py-3 text-muted-foreground">{b.owner_names ?? "—"}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2">
+                        <Select value={b.site_id || "__none__"} onValueChange={v => assignBuildingToSite(b.id, v === "__none__" ? null : v)}>
+                          <SelectTrigger className="w-[140px] h-8"><SelectValue placeholder={t(locale, "admin.assignSite")} /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__none__">— {t(locale, "admin.unassigned")} —</SelectItem>
+                            {sites.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => { setShowCreateBuilding(false); setEditingBuildingId(b.id); setBuildingEditForm({ name: b.name }); }}>
+                          <Pencil className="size-3.5" />{t(locale, "common.edit")}
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {!filteredBuildings.length && <p className="py-6 text-center text-muted-foreground">{t(locale, "admin.noBuildingsYet")}</p>}
         </CardContent>
       </Card>
     </div>

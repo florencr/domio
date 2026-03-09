@@ -33,22 +33,35 @@ export async function POST(request: Request) {
     const unitName = (unit as { unit_name?: string }).unit_name ?? "your unit";
 
     if (ownerId) {
-      const { data: existing } = await admin.from("unit_owners").select("id").eq("unit_id", unitId).maybeSingle();
-      if (existing) await admin.from("unit_owners").delete().eq("unit_id", unitId);
-      const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: ownerId });
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      await admin.from("user_site_assignments").delete().eq("user_id", ownerId);
-      await notifyUsers(admin, user.id, new Set([ownerId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
+      const { data: existingOwner } = await admin.from("unit_owners").select("owner_id").eq("unit_id", unitId).maybeSingle();
+      const currentOwnerId = (existingOwner as { owner_id: string } | null)?.owner_id;
+      if (currentOwnerId && currentOwnerId !== ownerId) {
+        return NextResponse.json({ error: "Unit already has an owner. Release the current owner first before assigning another." }, { status: 400 });
+      }
+      if (!currentOwnerId || currentOwnerId !== ownerId) {
+        if (currentOwnerId) await admin.from("unit_owners").delete().eq("unit_id", unitId);
+        const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: ownerId });
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await admin.from("user_site_assignments").delete().eq("user_id", ownerId);
+        await notifyUsers(admin, user.id, new Set([ownerId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
+      }
     } else {
       await admin.from("unit_owners").delete().eq("unit_id", unitId);
     }
 
     if (tenantId) {
-      await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
-      const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: tenantId, is_payment_responsible: true });
-      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
-      await admin.from("user_site_assignments").delete().eq("user_id", tenantId);
-      await notifyUsers(admin, user.id, new Set([tenantId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});
+      const { data: existingTenant } = await admin.from("unit_tenant_assignments").select("tenant_id").eq("unit_id", unitId).maybeSingle();
+      const currentTenantId = (existingTenant as { tenant_id: string } | null)?.tenant_id;
+      if (currentTenantId && currentTenantId !== tenantId) {
+        return NextResponse.json({ error: "Unit already has a tenant. Release the current tenant first before assigning another." }, { status: 400 });
+      }
+      if (!currentTenantId || currentTenantId !== tenantId) {
+        if (currentTenantId) await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
+        const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: tenantId, is_payment_responsible: true });
+        if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await admin.from("user_site_assignments").delete().eq("user_id", tenantId);
+        await notifyUsers(admin, user.id, new Set([tenantId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});
+      }
     } else {
       await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
     }

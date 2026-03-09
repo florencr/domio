@@ -33,7 +33,7 @@ export async function GET(request: Request) {
 
     if (!unitIds.length) {
       const [expensesRes, tenantsRes, asnRes] = await Promise.all([
-        admin.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
+        admin.from("expenses").select("id, title, vendor, amount, period_month, period_year, paid_at"),
         admin.from("profiles").select("id, name, surname, email").eq("role", "tenant"),
         admin.from("user_site_assignments").select("site_id").eq("user_id", user.id),
       ]);
@@ -58,10 +58,10 @@ export async function GET(request: Request) {
 
     const unitIdSet = new Set(unitIds.map((id: string) => String(id).toLowerCase()));
     const [unitsRes, allUnitsRes, billsRes, expensesRes, assignmentsRes, tenantsRes] = await Promise.all([
-      admin.from("units").select("id, unit_name, type, size_m2, building_id").in("id", unitIds),
+      admin.from("units").select("id, unit_name, type, size_m2, building_id, entrance, floor").in("id", unitIds),
       admin.from("units").select("id, unit_name"),
       admin.from("bills").select("id, unit_id, period_month, period_year, total_amount, status, paid_at, receipt_url, receipt_filename, receipt_path, reference_code").in("unit_id", unitIds).order("period_year", { ascending: false }).order("period_month", { ascending: false }).limit(500),
-      admin.from("expenses").select("id, title, vendor, amount, period_month, period_year"),
+      admin.from("expenses").select("id, title, vendor, amount, period_month, period_year, paid_at"),
       admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", unitIds),
       admin.from("profiles").select("id, name, surname, email").eq("role", "tenant"),
     ]);

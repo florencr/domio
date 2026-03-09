@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function ConfigAuditPage() {
+  const { locale } = useLocale();
   const [entries, setEntries] = useState<{ id: string; created_at: string; user_email: string | null; action: string; entity_type: string; entity_id: string | null; entity_label: string | null; old_values: unknown; new_values: unknown }[]>([]);
   const [loading, setLoading] = useState(true);
   const [entityType, setEntityType] = useState("all");
@@ -30,23 +33,23 @@ export default function ConfigAuditPage() {
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
           <div>
-            <CardTitle>Audit Log</CardTitle>
-            <p className="text-sm text-muted-foreground mt-1">Who changed what and when (your site only).</p>
+            <CardTitle>{t(locale, "configAudit.auditLog")}</CardTitle>
+            <p className="text-sm text-muted-foreground mt-1">{t(locale, "configAudit.auditDescription")}</p>
           </div>
           <Select value={entityType} onValueChange={v => { setEntityType(v); setLoading(true); }}>
             <SelectTrigger className="w-[140px] h-9"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All</SelectItem>
-              <SelectItem value="building">Buildings</SelectItem>
-              <SelectItem value="unit">Units</SelectItem>
-              <SelectItem value="service">Services</SelectItem>
-              <SelectItem value="bill">Bills</SelectItem>
-              <SelectItem value="expense">Expenses</SelectItem>
+              <SelectItem value="all">{t(locale, "configAudit.all")}</SelectItem>
+              <SelectItem value="building">{t(locale, "configAudit.buildings")}</SelectItem>
+              <SelectItem value="unit">{t(locale, "configAudit.units")}</SelectItem>
+              <SelectItem value="service">{t(locale, "configAudit.services")}</SelectItem>
+              <SelectItem value="bill">{t(locale, "configAudit.bills")}</SelectItem>
+              <SelectItem value="expense">{t(locale, "configAudit.expenses")}</SelectItem>
             </SelectContent>
           </Select>
         </CardHeader>
         <CardContent>
-          {loading && <p className="text-sm text-muted-foreground">Loading...</p>}
+          {loading && <p className="text-sm text-muted-foreground">{t(locale, "common.loading")}</p>}
           {!loading && (
             <div className="space-y-2 max-h-[400px] overflow-y-auto">
               {entries.map(e => (
@@ -64,7 +67,7 @@ export default function ConfigAuditPage() {
               ))}
             </div>
           )}
-          {!loading && !entries.length && <p className="py-6 text-center text-muted-foreground">No audit entries yet.</p>}
+          {!loading && !entries.length && <p className="py-6 text-center text-muted-foreground">{t(locale, "configAudit.noAuditEntriesYet")}</p>}
         </CardContent>
       </Card>
     </div>

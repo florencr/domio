@@ -22,12 +22,12 @@ export async function GET() {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin } = r;
-    const minimalSelect = "id,name,address,manager_id,created_at";
-    let result = await admin.from("sites").select(minimalSelect).order("created_at", { ascending: false });
-    try {
-      const fullResult = await admin.from("sites").select("id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,created_at").order("created_at", { ascending: false });
-      if (!fullResult.error && fullResult.data) result = fullResult;
-    } catch {
+    const fullSelect = "id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,created_at";
+    const result = await admin.from("sites").select(fullSelect).order("created_at", { ascending: false });
+    if (result.error && (result.error.message?.includes("column") || result.error.message?.includes("schema"))) {
+      const minimalResult = await admin.from("sites").select("id,name,address,manager_id,created_at").order("created_at", { ascending: false });
+      if (minimalResult.error) return NextResponse.json({ error: minimalResult.error.message }, { status: 500 });
+      return NextResponse.json(minimalResult.data ?? []);
     }
     if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
     return NextResponse.json(result.data ?? []);
@@ -41,27 +41,14 @@ export async function POST(request: Request) {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin, user } = r;
-    const { manager_id, name, address, vat_account, bank_name, iban, swift_code, tax_amount } = await request.json();
+    const { manager_id, name, address } = await request.json();
 
     if (!manager_id || !name?.trim()) {
       return NextResponse.json({ error: "manager_id and name required" }, { status: 400 });
     }
 
-    const fullInsert = {
-      manager_id,
-      name: name.trim(),
-      address: address?.trim() || "",
-      vat_account: vat_account?.trim() || null,
-      bank_name: bank_name?.trim() || null,
-      iban: iban != null && iban !== "" ? iban : null,
-      swift_code: swift_code?.trim() || null,
-      tax_amount: tax_amount != null && tax_amount !== "" ? Number(tax_amount) : null,
-    };
-    let result = await admin.from("sites").insert(fullInsert).select("id").single();
-    if (result.error && (result.error.message?.includes("column") || result.error.message?.includes("schema cache"))) {
-      const coreInsert = { manager_id, name: name.trim(), address: address?.trim() || "" };
-      result = await admin.from("sites").insert(coreInsert).select("id").single();
-    }
+    const coreInsert = { manager_id, name: name.trim(), address: address?.trim() || "" };
+    const result = await admin.from("sites").insert(coreInsert).select("id").single();
     const { data, error } = result;
     if (error) {
       if (error.code === "23505") return NextResponse.json({ error: "Manager already has a site" }, { status: 400 });

@@ -3,33 +3,37 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 const CONFIG_NAV = [
-  { href: "/dashboard/manager/config/buildings", label: "Buildings" },
-  { href: "/dashboard/manager/config/units", label: "Units" },
-  { href: "/dashboard/manager/config/unit-types", label: "Unit types" },
-  { href: "/dashboard/manager/config/services", label: "Services" },
-  { href: "/dashboard/manager/config/expenses", label: "Expenses" },
-  { href: "/dashboard/manager/config/vendors", label: "Vendors" },
-  { href: "/dashboard/manager/config/categories", label: "Categories" },
-  { href: "/dashboard/manager/config/users", label: "Users" },
-  { href: "/dashboard/manager/config/documents", label: "Documents" },
-  { href: "/dashboard/manager/config/notifications", label: "Notifications" },
-  { href: "/dashboard/manager/config/audit", label: "Audit" },
+  { href: "/dashboard/manager/config/account", key: "nav.config.account" },
+  { href: "/dashboard/manager/config/buildings", key: "nav.config.buildings" },
+  { href: "/dashboard/manager/config/units", key: "nav.config.units" },
+  { href: "/dashboard/manager/config/unit-types", key: "nav.config.unitTypes" },
+  { href: "/dashboard/manager/config/services", key: "nav.config.services" },
+  { href: "/dashboard/manager/config/expenses", key: "nav.config.expenses" },
+  { href: "/dashboard/manager/config/vendors", key: "nav.config.vendors" },
+  { href: "/dashboard/manager/config/categories", key: "nav.config.categories" },
+  { href: "/dashboard/manager/config/users", key: "nav.config.users" },
+  { href: "/dashboard/manager/config/documents", key: "nav.config.documents" },
+  { href: "/dashboard/manager/config/notifications", key: "nav.config.notifications" },
+  { href: "/dashboard/manager/config/audit", key: "nav.config.audit" },
 ];
 
 export default function ConfigLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { locale } = useLocale();
 
   return (
     <div className="mt-2">
       <div className="flex flex-wrap gap-1 mb-4">
-        {CONFIG_NAV.map(({ href, label }) => {
+        {CONFIG_NAV.map(({ href, key }) => {
           const isActive = pathname === href;
           return (
             <Link key={href} href={href}>
               <Button size="sm" variant={isActive ? "default" : "outline"} className="capitalize">
-                {label}
+                {t(locale, key)}
               </Button>
             </Link>
           );

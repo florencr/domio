@@ -23,6 +23,7 @@ export interface Profile {
   phone: string | null;
   email: string;
   role: AppRole;
+  locale?: string | null;
   created_at: string;
   updated_at: string;
 }

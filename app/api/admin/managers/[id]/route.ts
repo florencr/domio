@@ -43,7 +43,7 @@ export async function PATCH(
     const { admin } = r;
     const { id } = await context.params;
     const body = await request.json();
-    const { name, surname, email, phone, password } = body;
+    const { name, surname, email, phone, password, vat_account, bank_name, iban, swift_code, tax_amount } = body;
 
     if (!name || !surname || !email) {
       return NextResponse.json({ error: "Name, surname, email required" }, { status: 400 });
@@ -54,6 +54,20 @@ export async function PATCH(
 
     if (password && password.length >= 6) {
       await admin.auth.admin.updateUserById(id, { password });
+    }
+
+    const { data: site } = await admin.from("sites").select("id").eq("manager_id", id).maybeSingle();
+    if (site?.id && (vat_account !== undefined || bank_name !== undefined || iban !== undefined || swift_code !== undefined || tax_amount !== undefined)) {
+      const siteUpdates: { vat_account?: string | null; bank_name?: string | null; iban?: string | null; swift_code?: string | null; tax_amount?: number | null } = {};
+      if (vat_account !== undefined) siteUpdates.vat_account = vat_account?.trim() || null;
+      if (bank_name !== undefined) siteUpdates.bank_name = bank_name?.trim() || null;
+      if (iban !== undefined) siteUpdates.iban = iban != null && iban !== "" ? iban : null;
+      if (swift_code !== undefined) siteUpdates.swift_code = swift_code?.trim() || null;
+      if (tax_amount !== undefined) siteUpdates.tax_amount = tax_amount != null && tax_amount !== "" ? Number(tax_amount) : null;
+      if (Object.keys(siteUpdates).length > 0) {
+        const { error: updateErr } = await admin.from("sites").update(siteUpdates).eq("id", site.id);
+        if (updateErr) return NextResponse.json({ error: updateErr.message || "Failed to save bank details" }, { status: 400 });
+      }
     }
 
     return NextResponse.json({ success: true });

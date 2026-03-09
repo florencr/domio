@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useSearchParams } from "next/navigation";
 import { useAdminData } from "../context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -9,24 +9,25 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Plus, Pencil } from "lucide-react";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function AdminSitesPage() {
   const searchParams = useSearchParams();
-  const { sites, managers, buildings, load, msg, setMsg } = useAdminData();
+  const { locale } = useLocale();
+  const { sites, managers, load, msg, setMsg } = useAdminData();
   const [showCreateSite, setShowCreateSite] = useState(false);
-  const [siteForm, setSiteForm] = useState({ managerId: "", name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
+  const [siteForm, setSiteForm] = useState({ managerId: "", name: "", address: "" });
   const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
-  const [siteEditForm, setSiteEditForm] = useState({ name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
+  const [siteEditForm, setSiteEditForm] = useState({ name: "", address: "" });
+  const [filterManagerId, setFilterManagerId] = useState<string>("all");
 
   const managerMap = new Map(managers.map(m => [m.id, m]));
-  const buildingsBySite = new Map<string, typeof buildings>();
-  buildings.forEach(b => {
-    const sid = b.site_id ?? "_none";
-    const list = buildingsBySite.get(sid) ?? [];
-    list.push(b);
-    buildingsBySite.set(sid, list);
-  });
   const managersWithoutSite = managers.filter(m => !sites.some(s => s.manager_id === m.id));
+  const filteredSites = useMemo(() => {
+    if (filterManagerId === "all") return sites;
+    return sites.filter(s => s.manager_id === filterManagerId);
+  }, [sites, filterManagerId]);
 
   useEffect(() => {
     const editParam = searchParams.get("edit");
@@ -34,7 +35,7 @@ export default function AdminSitesPage() {
       const s = sites.find(x => x.id === editParam);
       if (s) {
         setEditingSiteId(editParam);
-        setSiteEditForm({ name: s.name, address: s.address || "", vat_account: s.vat_account || "", bank_name: s.bank_name || "", iban: s.iban || "", swift_code: s.swift_code || "", tax_amount: s.tax_amount != null ? String(s.tax_amount) : "" });
+        setSiteEditForm({ name: s.name, address: s.address || "" });
       }
     }
   }, [searchParams, sites]);
@@ -49,17 +50,12 @@ export default function AdminSitesPage() {
         manager_id: siteForm.managerId,
         name: siteForm.name,
         address: siteForm.address,
-        vat_account: siteForm.vat_account || null,
-        bank_name: siteForm.bank_name || null,
-        iban: siteForm.iban || null,
-        swift_code: siteForm.swift_code || null,
-        tax_amount: siteForm.tax_amount ? parseFloat(siteForm.tax_amount) : null,
       }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
       setMsg({ text: "Site created.", ok: true });
-      setSiteForm({ managerId: "", name: "", address: "", vat_account: "", bank_name: "", iban: "", swift_code: "", tax_amount: "" });
+      setSiteForm({ managerId: "", name: "", address: "" });
       setShowCreateSite(false);
       load();
     } else {
@@ -77,11 +73,6 @@ export default function AdminSitesPage() {
       body: JSON.stringify({
         name: siteEditForm.name,
         address: siteEditForm.address,
-        vat_account: siteEditForm.vat_account || null,
-        bank_name: siteEditForm.bank_name || null,
-        iban: siteEditForm.iban || null,
-        swift_code: siteEditForm.swift_code || null,
-        tax_amount: siteEditForm.tax_amount ? parseFloat(siteEditForm.tax_amount) : null,
       }),
     });
     const json = await res.json();
@@ -100,69 +91,83 @@ export default function AdminSitesPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Sites</CardTitle>
-            <p className="text-sm text-muted-foreground">Property sites. Assign a manager when creating.</p>
+            <CardTitle>{t(locale, "admin.sites")}</CardTitle>
+            <p className="text-sm text-muted-foreground">{t(locale, "admin.sitesDescription")}</p>
           </div>
           <Button onClick={() => { setShowCreateSite(!showCreateSite); setEditingSiteId(null); }} variant={showCreateSite ? "outline" : "default"}>
-            <Plus className="size-4 mr-1" />{showCreateSite ? "Cancel" : "Create Site"}
+            <Plus className="size-4 mr-1" />{showCreateSite ? t(locale, "common.cancel") : t(locale, "admin.createSite")}
           </Button>
         </CardHeader>
         <CardContent>
           {showCreateSite && (
             <form onSubmit={createSite} className="grid gap-3 p-4 border rounded-lg mb-4">
-              <div><Label>Manager</Label>
+              <div><Label>{t(locale, "admin.manager")}</Label>
                 <Select value={siteForm.managerId} onValueChange={v => setSiteForm({ ...siteForm, managerId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select manager" /></SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t(locale, "admin.selectManager")} /></SelectTrigger>
                   <SelectContent>
                     {managersWithoutSite.map(m => <SelectItem key={m.id} value={m.id}>{m.name} {m.surname} ({m.email})</SelectItem>)}
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>Site name</Label><Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder="e.g. Building Complex A" required /></div>
-              <div><Label>Address</Label><Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
-              <div><Label>VAT account</Label><Input value={siteForm.vat_account} onChange={e => setSiteForm({ ...siteForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
-              <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteForm.tax_amount} onChange={e => setSiteForm({ ...siteForm, tax_amount: e.target.value })} placeholder="e.g. 20" /></div>
-              <div><Label>Bank name</Label><Input value={siteForm.bank_name} onChange={e => setSiteForm({ ...siteForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
-              <div><Label>IBAN</Label><Input value={siteForm.iban} onChange={e => setSiteForm({ ...siteForm, iban: e.target.value })} placeholder="e.g. AL47 2121..." /></div>
-              <div><Label>SWIFT code</Label><Input value={siteForm.swift_code} onChange={e => setSiteForm({ ...siteForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
-              <Button type="submit" disabled={!siteForm.managerId || !managersWithoutSite.length}>Create Site</Button>
-              {!managersWithoutSite.length && <p className="text-xs text-amber-600">All managers have sites. Create a new manager first.</p>}
+              <div><Label>{t(locale, "admin.siteName")}</Label><Input value={siteForm.name} onChange={e => setSiteForm({ ...siteForm, name: e.target.value })} placeholder={t(locale, "admin.siteNamePlaceholder")} required /></div>
+              <div><Label>{t(locale, "admin.address")}</Label><Input value={siteForm.address} onChange={e => setSiteForm({ ...siteForm, address: e.target.value })} placeholder={t(locale, "admin.addressPlaceholder")} /></div>
+              <Button type="submit" disabled={!siteForm.managerId || !managersWithoutSite.length}>{t(locale, "admin.createSite")}</Button>
+              {!managersWithoutSite.length && <p className="text-xs text-amber-600">{t(locale, "admin.allManagersHaveSites")}</p>}
             </form>
           )}
           {editingSiteId && (
             <form onSubmit={updateSite} className="grid gap-3 p-4 border rounded-lg mb-4 bg-muted/30">
-              <p className="text-sm font-medium">Edit site</p>
-              <div><Label>Site name</Label><Input value={siteEditForm.name} onChange={e => setSiteEditForm({ ...siteEditForm, name: e.target.value })} required /></div>
-              <div><Label>Address</Label><Input value={siteEditForm.address} onChange={e => setSiteEditForm({ ...siteEditForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
-              <div><Label>VAT account</Label><Input value={siteEditForm.vat_account} onChange={e => setSiteEditForm({ ...siteEditForm, vat_account: e.target.value })} placeholder="e.g. AL123456789L" /></div>
-              <div><Label>Tax amount (%)</Label><Input type="number" step="0.01" min="0" max="100" value={siteEditForm.tax_amount} onChange={e => setSiteEditForm({ ...siteEditForm, tax_amount: e.target.value })} placeholder="e.g. 20" /></div>
-              <div><Label>Bank name</Label><Input value={siteEditForm.bank_name} onChange={e => setSiteEditForm({ ...siteEditForm, bank_name: e.target.value })} placeholder="e.g. Alpha Bank" /></div>
-              <div><Label>IBAN</Label><Input value={siteEditForm.iban} onChange={e => setSiteEditForm({ ...siteEditForm, iban: e.target.value })} placeholder="e.g. AL47 2121..." /></div>
-              <div><Label>SWIFT code</Label><Input value={siteEditForm.swift_code} onChange={e => setSiteEditForm({ ...siteEditForm, swift_code: e.target.value })} placeholder="e.g. CRBRSARI" /></div>
+              <p className="text-sm font-medium">{t(locale, "admin.editSite")}</p>
+              <div><Label>{t(locale, "admin.siteName")}</Label><Input value={siteEditForm.name} onChange={e => setSiteEditForm({ ...siteEditForm, name: e.target.value })} required /></div>
+              <div><Label>{t(locale, "admin.address")}</Label><Input value={siteEditForm.address} onChange={e => setSiteEditForm({ ...siteEditForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
               <div className="flex gap-2">
-                <Button type="submit">Save</Button>
-                <Button type="button" variant="outline" onClick={() => setEditingSiteId(null)}>Cancel</Button>
+                <Button type="submit">{t(locale, "common.save")}</Button>
+                <Button type="button" variant="outline" onClick={() => setEditingSiteId(null)}>{t(locale, "common.cancel")}</Button>
               </div>
             </form>
           )}
-          <div className="space-y-2">
-            {sites.map(s => {
-              const m = managerMap.get(s.manager_id);
-              const siteBuildings = buildingsBySite.get(s.id) ?? [];
-              return (
-                <div key={s.id} className="flex items-center justify-between py-2 px-3 rounded-lg border bg-card">
-                  <div>
-                    <p className="font-medium">{s.name}</p>
-                    <p className="text-sm text-muted-foreground">{s.address || "—"}</p>
-                    <p className="text-xs text-muted-foreground mt-1">Manager: {m ? `${m.name} ${m.surname}` : "—"}</p>
-                    {siteBuildings.length > 0 && <p className="text-xs text-muted-foreground">Buildings: {siteBuildings.map(b => b.name).join(", ")}</p>}
-                  </div>
-                  <Button variant="outline" size="sm" onClick={() => { setShowCreateSite(false); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "", vat_account: s.vat_account || "", bank_name: s.bank_name || "", iban: s.iban || "", swift_code: s.swift_code || "", tax_amount: s.tax_amount != null ? String(s.tax_amount) : "" }); }}><Pencil className="size-4 mr-1" />Edit</Button>
-                </div>
-              );
-            })}
+          <div className="flex flex-wrap gap-3 mb-4">
+            <div className="flex items-center gap-2">
+              <Label className="text-xs text-muted-foreground whitespace-nowrap">{t(locale, "admin.filterByManager")}</Label>
+              <Select value={filterManagerId} onValueChange={setFilterManagerId}>
+                <SelectTrigger className="w-[180px] h-8"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">{t(locale, "common.all")}</SelectItem>
+                  {managers.map(m => <SelectItem key={m.id} value={m.id}>{m.name} {m.surname}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
-          {!sites.length && <p className="py-6 text-center text-muted-foreground">No sites yet.</p>}
+          <div className="overflow-x-auto rounded-lg border">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="bg-muted/50 border-b">
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.name")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.address")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.manager")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.action")}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredSites.map(s => {
+                  const m = managerMap.get(s.manager_id);
+                  return (
+                    <tr key={s.id} className="border-b last:border-0 hover:bg-muted/20">
+                      <td className="px-4 py-3 font-medium">{s.name}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{s.address || "—"}</td>
+                      <td className="px-4 py-3 text-muted-foreground">{m ? `${m.name} ${m.surname}` : "—"}</td>
+                      <td className="px-4 py-3">
+                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => { setShowCreateSite(false); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "" }); }}>
+                          <Pencil className="size-3.5" />{t(locale, "common.edit")}
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {!filteredSites.length && <p className="py-6 text-center text-muted-foreground">{t(locale, "admin.noSitesYet")}</p>}
         </CardContent>
       </Card>
     </div>

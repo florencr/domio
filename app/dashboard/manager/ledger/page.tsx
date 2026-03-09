@@ -10,11 +10,14 @@ import { SlidersHorizontal } from "lucide-react";
 import { useManagerData } from "../context";
 import { MONTHS, expenseRef } from "../types";
 import type { BillLine } from "../types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 type LedgerRow = { key: string; date: string; type: "income" | "expense"; label: string; ref: string; amount: number; status: string };
 
 export default function ManagerLedgerPage() {
   const { data, loading } = useManagerData();
+  const { locale } = useLocale();
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterUnitType, setFilterUnitType] = useState<string>("all");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
@@ -26,7 +29,7 @@ export default function ManagerLedgerPage() {
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  if (loading) return <p className="text-muted-foreground">Loading...</p>;
+  if (loading) return <p className="text-muted-foreground">{t(locale, "common.loading")}</p>;
 
   const { bills, billLines, expenses, units, unitTypes } = data;
   const unitMap = new Map(units.map(u => [u.id, u]));
@@ -63,13 +66,13 @@ export default function ManagerLedgerPage() {
   const billRows: LedgerRow[] = [];
   for (const b of filteredBills) {
     const lines = ledgerLinesByBill.get(b.id) ?? [];
-    const baseLabel = `${unitNameMap.get(b.unit_id) ?? "—"} — ${MONTHS[b.period_month - 1]} ${b.period_year}`;
+    const baseLabel = `${unitNameMap.get(b.unit_id) ?? "—"} — ${t(locale, `common.month${b.period_month}`)} ${b.period_year}`;
     const baseDate = `${b.period_year}-${String(b.period_month).padStart(2, "0")}`;
     const baseStatus = b.paid_at ? "Paid" : b.status === "in_process" ? "In process" : b.status;
     const ref = b.reference_code ?? "—";
     if (lines.length > 0) {
       lines.forEach((l, i) => {
-        const lineTypeLabel = l.line_type === "manual" ? "Once off" : "Recurrent";
+        const lineTypeLabel = l.line_type === "manual" ? t(locale, "manager.onceOff") : t(locale, "manager.recurrent");
         billRows.push({ key: `b-${b.id}-${i}`, date: baseDate, type: "income", label: `${baseLabel} · ${lineTypeLabel}: ${l.description || "—"}`, ref, amount: Math.abs(Number(l.amount)), status: baseStatus });
       });
     } else {
@@ -103,13 +106,13 @@ export default function ManagerLedgerPage() {
       label: `${e.title} · ${e.vendor}`,
       ref: getExpenseDisplayRef(e),
       amount: Number(e.amount),
-      status: e.paid_at ? "Paid" : e.frequency,
+      status: e.paid_at ? "Paid" : "Unpaid",
     })),
   ];
 
   const periodLabel = (d: string) => {
     const [y, m] = d.split("-");
-    return `${MONTHS[parseInt(m || "1") - 1]} ${y}`;
+    return `${t(locale, `common.month${parseInt(m || "1")}`)} ${y}`;
   };
 
   const getLedgerValue = (r: LedgerRow & { balance?: number }, col: string): string | number => {
@@ -141,22 +144,22 @@ export default function ManagerLedgerPage() {
     <div className="space-y-4 mt-2">
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card className="py-2 px-4 gap-1">
-          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total Billed</CardTitle></CardHeader>
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.totalBilled")}</CardTitle></CardHeader>
           <CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-green-600">+{totalIn.toFixed(2)}</p></CardContent>
         </Card>
         <Card className="py-2 px-4 gap-1">
-          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Total Expenses</CardTitle></CardHeader>
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.totalExpenses")}</CardTitle></CardHeader>
           <CardContent className="pb-2 pt-0 px-0"><p className="text-lg font-extrabold text-red-600">-{totalOut.toFixed(2)}</p></CardContent>
         </Card>
         <Card className="py-2 px-4 gap-1">
-          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Balance</CardTitle></CardHeader>
+          <CardHeader className="pb-0 pt-2 px-0"><CardTitle className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.balance")}</CardTitle></CardHeader>
           <CardContent className="pb-2 pt-0 px-0"><p className={`text-lg font-extrabold ${totalIn - totalOut >= 0 ? "text-blue-600" : "text-red-600"}`}>{(totalIn - totalOut).toFixed(2)}</p></CardContent>
         </Card>
       </div>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <CardTitle>Full Ledger ({rows.length}{rows.length !== unfilteredEntryCount ? ` of ${unfilteredEntryCount}` : ""} entries)</CardTitle>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+          <CardTitle>{t(locale, "headers.fullLedger")} ({rows.length}{rows.length !== unfilteredEntryCount ? ` ${t(locale, "owner.of")} ${unfilteredEntryCount}` : ""} {t(locale, "headers.entries")})</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label={t(locale, "common.toggleFilters")}>
             <SlidersHorizontal className="size-4" />
           </Button>
         </CardHeader>
@@ -172,55 +175,55 @@ export default function ManagerLedgerPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit type</Label>
+                <div><Label className="text-xs">{t(locale, "table.unitType")}</Label>
                   <Select value={filterUnitType} onValueChange={setFilterUnitType}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All types</SelectItem>{unitTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allTypes")}</SelectItem>{unitTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit</Label>
+                <div><Label className="text-xs">{t(locale, "table.unit")}</Label>
                   <Select value={filterUnitId} onValueChange={setFilterUnitId}>
                     <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allUnits")}</SelectItem>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Category</Label>
+                <div><Label className="text-xs">{t(locale, "configServices.category")}</Label>
                   <Select value={filterCategory} onValueChange={setFilterCategory}>
                     <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All categories</SelectItem>{[...new Set(expenses.map(e => e.category).filter((c): c is string => !!c))].sort().map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "manager.allCategories")}</SelectItem>{[...new Set(expenses.map(e => e.category).filter((c): c is string => !!c))].sort().map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Vendor</Label>
+                <div><Label className="text-xs">{t(locale, "configExpenses.vendor")}</Label>
                   <Select value={filterVendor} onValueChange={setFilterVendor}>
                     <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All vendors</SelectItem>{[...new Set(expenses.map(e => e.vendor).filter((v): v is string => !!v))].sort().map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "manager.allVendors")}</SelectItem>{[...new Set(expenses.map(e => e.vendor).filter((v): v is string => !!v))].sort().map(v => <SelectItem key={v} value={v}>{v}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Type</Label>
+                <div><Label className="text-xs">{t(locale, "table.type")}</Label>
                   <Select value={filterType} onValueChange={setFilterType}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">Bill & Expense</SelectItem><SelectItem value="bill">Bill only</SelectItem><SelectItem value="expense">Expense only</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "manager.billAndExpense")}</SelectItem><SelectItem value="bill">{t(locale, "manager.billOnly")}</SelectItem><SelectItem value="expense">{t(locale, "manager.expenseOnly")}</SelectItem></SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Payment</Label>
+                <div><Label className="text-xs">{t(locale, "manager.payment")}</Label>
                   <Select value={filterPaymentStatus} onValueChange={setFilterPaymentStatus}>
                     <SelectTrigger className="h-8 w-28"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All</SelectItem><SelectItem value="paid">Paid</SelectItem><SelectItem value="unpaid">Unpaid</SelectItem></SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "common.all")}</SelectItem><SelectItem value="paid">{t(locale, "filters.paid")}</SelectItem><SelectItem value="unpaid">{t(locale, "filters.unpaid")}</SelectItem></SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[600px]">
+            <table className="w-full min-w-full text-sm table-fixed">
               <thead><tr className="border-b text-left">
-                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
-                <SortableTh column="date" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
-                <SortableTh column="type" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Type</SortableTh>
-                <SortableTh column="label" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Description</SortableTh>
-                <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">Status</SortableTh>
-                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">Amount</SortableTh>
-                <SortableTh column="balance" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground" align="right">Running Balance</SortableTh>
+                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
+                <SortableTh column="date" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
+                <SortableTh column="type" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.type")}</SortableTh>
+                <SortableTh column="label" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.description")}</SortableTh>
+                <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
+                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
+                <SortableTh column="balance" sortCol={sortCol} sortDir={sortDir} onSort={handleLedgerSort} className="pb-3 font-medium text-muted-foreground" align="right">{t(locale, "table.runningBalance")}</SortableTh>
               </tr></thead>
               <tbody className="divide-y divide-border">
                 {rowsWithBalance.map(r => (
@@ -229,8 +232,8 @@ export default function ManagerLedgerPage() {
                     <td className="py-3 pr-4 text-muted-foreground font-medium">{periodLabel(r.date)}</td>
                     <td className="py-3 pr-4">
                       {r.type === "income"
-                        ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">Bill</span>
-                        : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">Expense</span>}
+                        ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "tenant.bill")}</span>
+                        : <span className="text-xs bg-red-100 text-red-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "tenant.expense")}</span>}
                     </td>
                     <td className="py-3 pr-4">{r.label}</td>
                     <td className="py-3 pr-4 text-muted-foreground text-xs capitalize">{r.status}</td>
@@ -240,7 +243,7 @@ export default function ManagerLedgerPage() {
                     <td className={`py-3 text-right font-mono text-sm ${r.balance! >= 0 ? "text-blue-600" : "text-red-600"}`}>{r.balance!.toFixed(2)}</td>
                   </tr>
                 ))}
-                {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{unfilteredEntryCount > 0 ? "No entries match filters." : "No transactions yet."}</td></tr>}
+                {!rows.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{unfilteredEntryCount > 0 ? t(locale, "manager.noEntriesMatchFilters") : t(locale, "tenant.noTransactionsYet")}</td></tr>}
               </tbody>
             </table>
           </div>

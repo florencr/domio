@@ -62,7 +62,7 @@ export default function AdminOverviewPage() {
           <p className="text-sm text-muted-foreground">Sites with address, buildings, and assigned manager. Use the nav to create and connect.</p>
         </CardHeader>
         <CardContent>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-full text-sm table-fixed">
             <thead>
               <tr className="border-b">
                 <th className="py-2 text-left font-medium">Site</th>

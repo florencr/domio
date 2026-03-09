@@ -26,32 +26,17 @@ export async function PATCH(
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin, user } = r;
     const { id } = await context.params;
-    const { name, address, vat_account, bank_name, iban, swift_code, tax_amount, manager_id } = await request.json();
+    const { name, address } = await request.json();
 
-    const updates: { name?: string; address?: string; vat_account?: string; bank_name?: string; iban?: string; swift_code?: string; tax_amount?: number | null; manager_id?: string } = {};
-    if (manager_id !== undefined && manager_id) updates.manager_id = manager_id;
+    const updates: { name?: string; address?: string } = {};
     if (name !== undefined) updates.name = name.trim();
     if (address !== undefined) updates.address = address.trim();
-    if (vat_account !== undefined) updates.vat_account = vat_account?.trim() || null;
-    if (bank_name !== undefined) updates.bank_name = bank_name?.trim() || null;
-    if (iban !== undefined) updates.iban = iban != null && iban !== "" ? iban : null;
-    if (swift_code !== undefined) updates.swift_code = swift_code?.trim() || null;
-    if (tax_amount !== undefined) updates.tax_amount = tax_amount != null && tax_amount !== "" ? Number(tax_amount) : null;
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "name, address, vat_account, bank_name, iban, swift_code, tax_amount or manager_id required" }, { status: 400 });
+      return NextResponse.json({ error: "name or address required" }, { status: 400 });
     }
 
-    let updateResult = await admin.from("sites").update(updates).eq("id", id);
-    if (updateResult.error && (updateResult.error.message?.includes("column") || updateResult.error.message?.includes("schema cache"))) {
-      const coreUpdates: Record<string, unknown> = {};
-      if (updates.name !== undefined) coreUpdates.name = updates.name;
-      if (updates.address !== undefined) coreUpdates.address = updates.address;
-      if (updates.manager_id !== undefined) coreUpdates.manager_id = updates.manager_id;
-      if (Object.keys(coreUpdates).length > 0) {
-        updateResult = await admin.from("sites").update(coreUpdates).eq("id", id);
-      }
-    }
+    const updateResult = await admin.from("sites").update(updates).eq("id", id);
     if (updateResult.error) return NextResponse.json({ error: updateResult.error.message }, { status: 500 });
 
     await logAudit({

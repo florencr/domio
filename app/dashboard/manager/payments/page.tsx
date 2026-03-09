@@ -6,20 +6,23 @@ import { SortableTh, sortBy } from "@/components/ui/sortable-th";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { SlidersHorizontal } from "lucide-react";
+import { SlidersHorizontal, FileText } from "lucide-react";
 import { useManagerData } from "../context";
 import { MONTHS } from "../types";
 import type { Bill } from "../types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function ManagerPaymentsPage() {
   const { data, loading } = useManagerData();
+  const { locale } = useLocale();
   const [filterPeriod, setFilterPeriod] = useState<string>("all");
   const [filterUnitId, setFilterUnitId] = useState<string>("all");
   const [showFilters, setShowFilters] = useState(false);
   const [sortCol, setSortCol] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
 
-  if (loading) return <p className="text-muted-foreground">Loading...</p>;
+  if (loading) return <p className="text-muted-foreground">{t(locale, "common.loading")}</p>;
 
   const { bills, units, profiles, unitOwners } = data;
   const unitMap = new Map(units.map(u => [u.id, u]));
@@ -60,8 +63,8 @@ export default function ManagerPaymentsPage() {
       </Card>
       <Card>
         <CardHeader className="flex flex-row items-start justify-between gap-4">
-          <CardTitle>Payment History ({paid.length}{paidRaw.length !== bills.filter(b => b.paid_at).length ? ` of ${bills.filter(b => b.paid_at).length}` : ""})</CardTitle>
-          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label="Toggle filters">
+          <CardTitle>{t(locale, "manager.paymentHistory")} ({paid.length}{paidRaw.length !== bills.filter(b => b.paid_at).length ? ` of ${bills.filter(b => b.paid_at).length}` : ""})</CardTitle>
+          <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 md:hidden" onClick={() => setShowFilters(v => !v)} aria-label={t(locale, "common.toggleFilters")}>
             <SlidersHorizontal className="size-4" />
           </Button>
         </CardHeader>
@@ -69,32 +72,33 @@ export default function ManagerPaymentsPage() {
           <div className={`grid transition-[grid-template-rows] duration-200 ${showFilters ? "grid-rows-[1fr]" : "grid-rows-[0fr]"} md:grid-rows-[1fr]`}>
             <div className="min-h-0 overflow-hidden">
               <div className="flex flex-wrap gap-2 items-end pb-3">
-                <div><Label className="text-xs">Period</Label>
+                <div><Label className="text-xs">{t(locale, "table.period")}</Label>
                   <Select value={filterPeriod} onValueChange={setFilterPeriod}>
                     <SelectTrigger className="h-8 w-32"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All periods</SelectItem>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allPeriods")}</SelectItem>
                       {[...new Set(bills.filter(b => b.paid_at).map(b => `${b.period_year}-${b.period_month}`))].sort((a, b) => b.localeCompare(a)).slice(0, 24).map(k => { const [y, m] = k.split("-"); return <SelectItem key={k} value={k}>{MONTHS[parseInt(m || "1") - 1]} {y}</SelectItem> })}
                     </SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit</Label>
+                <div><Label className="text-xs">{t(locale, "table.unit")}</Label>
                   <Select value={filterUnitId} onValueChange={setFilterUnitId}>
                     <SelectTrigger className="h-8 w-36"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">All units</SelectItem>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
+                    <SelectContent><SelectItem value="all">{t(locale, "filters.allUnits")}</SelectItem>{units.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
               </div>
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[500px]">
+            <table className="w-full min-w-full text-sm table-fixed">
               <thead><tr className="border-b text-left">
-                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Reference</SortableTh>
-                <SortableTh column="paidOn" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Paid On</SortableTh>
-                <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Unit</SortableTh>
-                <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Owner</SortableTh>
-                <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">Period</SortableTh>
-                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 font-medium text-muted-foreground" align="right">Amount</SortableTh>
+                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
+                <SortableTh column="paidOn" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
+                <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
+                <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "common.owner")}</SortableTh>
+                <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
+                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
+                <th className="pb-3 font-medium text-muted-foreground">{t(locale, "table.slip")}</th>
               </tr></thead>
               <tbody className="divide-y divide-border">
                 {paid.map(b => {
@@ -108,11 +112,18 @@ export default function ManagerPaymentsPage() {
                       <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : "—"}</td>
                       <td className="py-3 pr-4 text-muted-foreground">{MONTHS[b.period_month - 1]} {b.period_year}</td>
-                      <td className="py-3 text-right font-semibold text-green-600">{Number(b.total_amount).toFixed(2)}</td>
+                      <td className="py-3 pr-4 text-right font-semibold text-green-600">{Number(b.total_amount).toFixed(2)}</td>
+                      <td className="py-3 pr-4">
+                        {(b.receipt_url || b.receipt_path) ? (
+                          <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">—</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}
-                {!paid.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">{paidRaw.length === 0 && bills.filter(b => b.paid_at).length > 0 ? "No payments match filters." : "No payments yet."}</td></tr>}
+                {!paid.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{paidRaw.length === 0 && bills.filter(b => b.paid_at).length > 0 ? t(locale, "manager.noPaymentsMatchFilters") : t(locale, "manager.noPaymentsYet")}</td></tr>}
               </tbody>
             </table>
           </div>

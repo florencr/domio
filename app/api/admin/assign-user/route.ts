@@ -41,13 +41,13 @@ export async function POST(request: Request) {
       const unitName = (unit as { unit_name?: string } | null)?.unit_name ?? "your unit";
       if (role === "owner") {
         const { data: existing } = await admin.from("unit_owners").select("id").eq("unit_id", unitId).maybeSingle();
-        if (existing) return NextResponse.json({ error: "Unit already has an owner" }, { status: 400 });
+        if (existing) return NextResponse.json({ error: "Unit already has an owner. Release the current owner first before assigning another." }, { status: 400 });
         const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: userId });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
         await notifyUsers(admin, adminUser.id, new Set([userId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
       } else {
         const { data: existing } = await admin.from("unit_tenant_assignments").select("id").eq("unit_id", unitId).maybeSingle();
-        if (existing) return NextResponse.json({ error: "Unit already has a tenant" }, { status: 400 });
+        if (existing) return NextResponse.json({ error: "Unit already has a tenant. Release the current tenant first before assigning another." }, { status: 400 });
         const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: userId, is_payment_responsible: true });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
         await notifyUsers(admin, adminUser.id, new Set([userId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});

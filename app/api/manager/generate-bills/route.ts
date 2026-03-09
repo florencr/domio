@@ -3,6 +3,7 @@ import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit";
 import { notifyUsers } from "@/lib/notify-users";
+import { t } from "@/lib/i18n";
 
 async function requireManager() {
   const sb = await createClient();
@@ -126,6 +127,7 @@ export async function POST(request: Request) {
     const unitIds = [...new Set(insertedBills.map(b => b.unit_id))];
     const MONTHS = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
     const monthName = MONTHS[m - 1] ?? String(m);
+    const params = { month: monthName, year: String(y) };
     const notifyUserIds = new Set<string>();
     if (unitIds.length > 0) {
       const { data: owners } = await admin.from("unit_owners").select("unit_id, owner_id").in("unit_id", unitIds);
@@ -137,7 +139,21 @@ export async function POST(request: Request) {
       });
       billToMap.forEach(uid => notifyUserIds.add(uid));
     }
-    await notifyUsers(admin, user.id, notifyUserIds, `New bills for ${monthName} ${y}`, `Your maintenance bill for ${monthName} ${y} is ready. Please log in to view and pay.`);
+    if (notifyUserIds.size > 0) {
+      const { data: profiles } = await admin.from("profiles").select("id, locale").in("id", [...notifyUserIds]);
+      const usersByLocale = new Map<string, Set<string>>();
+      for (const uid of notifyUserIds) {
+        const p = (profiles ?? []).find((x: { id: string; locale?: string }) => x.id === uid);
+        const loc = (p?.locale === "al" ? "al" : "en") as "en" | "al";
+        if (!usersByLocale.has(loc)) usersByLocale.set(loc, new Set());
+        usersByLocale.get(loc)!.add(uid);
+      }
+      for (const [loc, userIds] of usersByLocale) {
+        const title = t(loc as "en" | "al", "notifications.billReady", params);
+        const body = t(loc as "en" | "al", "notifications.billReadyBody", params);
+        await notifyUsers(admin, user.id, userIds, title, body);
+      }
+    }
 
     return NextResponse.json({ success: true, count: insertedBills.length });
   } catch (err) {

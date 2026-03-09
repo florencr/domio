@@ -52,12 +52,11 @@ export async function assignUnitToOwner(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   
-  // Check if already assigned
   const { data: existing } = await supabase
     .from("unit_owners")
     .select("id")
     .eq("unit_id", unitId)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     return { success: false, error: "Unit already has an owner. Remove current owner first." };
@@ -88,12 +87,11 @@ export async function assignUnitToTenant(
 ): Promise<{ success: boolean; error?: string }> {
   const supabase = await createClient();
   
-  // Check if already assigned
   const { data: existing } = await supabase
     .from("unit_tenant_assignments")
     .select("id")
     .eq("unit_id", unitId)
-    .single();
+    .maybeSingle();
 
   if (existing) {
     return { success: false, error: "Unit already has a tenant. Remove current tenant first." };

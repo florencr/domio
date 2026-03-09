@@ -5,25 +5,27 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileText, AlertTriangle, Home, BookOpen, Bell, CreditCard } from "lucide-react";
+import { LogOut, User, FileText, AlertTriangle, Home, BookOpen, Bell, CreditCard, SlidersHorizontal } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
-import { ThemeToggle } from "@/components/ThemeToggle";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
 import { OwnerDataProvider, useOwnerData } from "./context";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
-const NAV_ITEMS = [
-  { href: "/dashboard/owner/units", label: "My Units", icon: Home },
-  { href: "/dashboard/owner/billing", label: "Billing", icon: FileText },
-  { href: "/dashboard/owner/payments", label: "Payments", icon: CreditCard },
-  { href: "/dashboard/owner/ledger", label: "Ledger", icon: BookOpen },
-  { href: "/dashboard/owner/notifications", label: "Notifications", icon: Bell },
+const NAV_KEYS = [
+  { href: "/dashboard/owner/units", key: "nav.owner.myUnits", icon: Home },
+  { href: "/dashboard/owner/billing", key: "nav.owner.billing", icon: FileText },
+  { href: "/dashboard/owner/payments", key: "nav.owner.payments", icon: CreditCard },
+  { href: "/dashboard/owner/ledger", key: "nav.owner.ledger", icon: BookOpen },
+  { href: "/dashboard/owner/notifications", key: "nav.owner.notifications", icon: Bell },
 ];
 
 function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const { data, loading } = useOwnerData();
+  const { locale } = useLocale();
 
   async function handleSignOut() {
     await createClient().auth.signOut();
@@ -33,7 +35,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <p className="text-muted-foreground">Loading...</p>
+        <p className="text-muted-foreground">{t(locale, "common.loading")}</p>
       </div>
     );
   }
@@ -53,10 +55,12 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 dark:bg-background/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
           <Link href="/dashboard/owner" className="flex items-center gap-2">
             <DomioLogo className="h-9 w-auto shrink-0" />
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">Owner Dashboard</span>
+            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{t(locale, "owner.ownerDashboard")}</span>
           </Link>
           <div className="flex items-center gap-2 md:gap-2">
-            <ThemeToggle />
+            <Link href="/dashboard/owner/preferences">
+              <Button variant="ghost" size="icon" title={t(locale, "common.preferences")}><SlidersHorizontal className="size-5" /></Button>
+            </Link>
             <NotificationBell onSeeAllClick={() => router.push("/dashboard/owner/notifications")} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
@@ -68,15 +72,21 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
               <DropdownMenuContent align="end" className="w-64">
                 <div className="p-3 space-y-2">
                   <p className="font-semibold">{profile?.name} {profile?.surname}</p>
-                  <p className="text-sm text-muted-foreground capitalize">Role: {profile?.role}</p>
-                  <p className="text-sm text-muted-foreground">Site: {data.siteNames?.length ? data.siteNames.join(", ") : "—"}</p>
+                <p className="text-sm text-muted-foreground capitalize">{t(locale, "common.role")}: {profile?.role}</p>
+                <p className="text-sm text-muted-foreground">{t(locale, "common.site")}: {data.siteNames?.length ? data.siteNames.join(", ") : "—"}</p>
                   <p className="text-sm text-muted-foreground">{profile?.email}</p>
                   {profile?.phone && <p className="text-sm text-muted-foreground"><a href={`tel:${profile.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{profile.phone}</a></p>}
                 </div>
                 <DropdownMenuSeparator />
+                <Link href="/dashboard/owner/preferences">
+                  <DropdownMenuItem className="gap-2 cursor-pointer">
+                    <SlidersHorizontal className="size-4" />
+                    {t(locale, "common.preferences")}
+                  </DropdownMenuItem>
+                </Link>
                 <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer">
                   <LogOut className="size-4" />
-                  Logout
+                  {t(locale, "common.logout")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
             </DropdownMenu>
@@ -87,7 +97,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
           <div className="mb-4 flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-4 dark:bg-amber-950/30 dark:border-amber-800">
             <AlertTriangle className="h-4 w-4 shrink-0 text-amber-600 dark:text-amber-500" />
             <p className="text-sm">
-              You have <strong>{unpaidBills.length} unpaid bill{unpaidBills.length > 1 ? "s" : ""}</strong> ({outstanding.toFixed(2)} total). Please pay or upload your payment slip in the Billing tab.
+              {unpaidBills.length === 1 ? t(locale, "owner.unpaidBillsAlert", { count: "1", total: outstanding.toFixed(2) }) : t(locale, "owner.unpaidBillsAlertPlural", { count: String(unpaidBills.length), total: outstanding.toFixed(2) })}
             </p>
           </div>
         )}
@@ -96,35 +106,35 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
           <Card className="border-l-4 border-l-green-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
             <p className="text-xl font-extrabold text-green-600 shrink-0">{collected.toFixed(2)}</p>
             <div className="text-right md:text-left">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Collected</p>
-              <p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>b.paid_at).length} paid bills</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.collected")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t(locale, "manager.collectedFrom", { count: String(myBills.filter(b=>b.paid_at).length) })}</p>
             </div>
           </Card>
           <Card className="border-l-4 border-l-red-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
             <p className="text-xl font-extrabold text-red-600 shrink-0">{outstanding.toFixed(2)}</p>
             <div className="text-right md:text-left">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Outstanding</p>
-              <p className="text-xs text-muted-foreground mt-0.5">From {myBills.filter(b=>!b.paid_at).length} unpaid bills</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.outstanding")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t(locale, "manager.outstandingFrom", { count: String(myBills.filter(b=>!b.paid_at).length) })}</p>
             </div>
           </Card>
           <Card className="border-l-4 border-l-orange-500 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start">
             <p className="text-xl font-extrabold text-orange-600 shrink-0">{monthlyExpenses.toFixed(2)}</p>
             <div className="text-right md:text-left">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Monthly Expenses</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{expenseRecords.length} expense records</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.monthlyExpenses")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t(locale, "manager.expenseRecords", { count: String(expenseRecords.length) })}</p>
             </div>
           </Card>
           <Card className={`border-l-4 py-3 gap-1 px-4 flex flex-row items-center justify-between md:flex-col md:items-start md:justify-start ${netFund >= 0 ? "border-l-blue-500" : "border-l-amber-500"}`}>
             <p className={`text-xl font-extrabold shrink-0 ${netFund >= 0 ? "text-blue-600" : "text-amber-600"}`}>{netFund.toFixed(2)}</p>
             <div className="text-right md:text-left">
-              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">Net Fund</p>
-              <p className="text-xs text-muted-foreground mt-0.5">Collected minus expenses</p>
+              <p className="text-xs font-bold text-muted-foreground uppercase tracking-wide">{t(locale, "manager.netFund")}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{t(locale, "manager.collectedMinusExpenses")}</p>
             </div>
           </Card>
         </div>
 
         <nav className="flex flex-wrap gap-1 mb-6">
-          {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+          {NAV_KEYS.map(({ href, key, icon: Icon }) => {
             const isActive = pathname === href;
             return (
               <Link key={href} href={href}>
@@ -134,7 +144,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
                   className={`flex items-center gap-2 ${isActive ? "bg-muted" : ""}`}
                 >
                   <Icon className="size-4" />
-                  {label}
+                  {t(locale, key)}
                 </Button>
               </Link>
             );
@@ -147,12 +157,12 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
 
         <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <nav className="grid grid-cols-5 gap-1 h-12 min-h-[48px] p-1.5 rounded-lg">
-            {NAV_ITEMS.map(({ href, label, icon: Icon }) => {
+            {NAV_KEYS.map(({ href, key, icon: Icon }) => {
               const isActive = pathname === href;
               return (
                 <Link key={href} href={href} className={`flex flex-col items-center justify-center gap-0.5 text-xs font-semibold rounded-md ${isActive ? "bg-muted" : ""}`}>
                   <Icon className="size-4" />
-                  {label}
+                  {t(locale, key)}
                 </Link>
               );
             })}

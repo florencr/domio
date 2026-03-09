@@ -17,14 +17,66 @@ async function requireAdmin() {
   return { ok: true as const, admin, user };
 }
 
+type BuildingRow = { id: string; name: string; site_id: string | null };
+type SiteRow = { id: string; name: string; manager_id: string | null };
+type ProfileRow = { id: string; name: string; surname: string };
+type UnitRow = { id: string; building_id: string };
+type UnitOwnerRow = { unit_id: string; owner_id: string };
+
 export async function GET() {
   try {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin } = r;
-    const { data, error } = await admin.from("buildings").select("id,name,site_id");
-    if (error) return NextResponse.json({ error: error.message }, { status: 500 });
-    return NextResponse.json(data ?? []);
+
+    const { data: buildingsData, error: buildErr } = await admin.from("buildings").select("id,name,site_id");
+    if (buildErr) return NextResponse.json({ error: buildErr.message }, { status: 500 });
+    const buildings = (buildingsData ?? []) as BuildingRow[];
+
+    const { data: sitesData } = await admin.from("sites").select("id,name,manager_id");
+    const sites = (sitesData ?? []) as SiteRow[];
+    const siteMap = new Map(sites.map(s => [s.id, s]));
+
+    const { data: profilesData } = await admin.from("profiles").select("id,name,surname");
+    const profiles = (profilesData ?? []) as ProfileRow[];
+    const profileMap = new Map(profiles.map(p => [p.id, p]));
+
+    const { data: unitsData } = await admin.from("units").select("id,building_id");
+    const units = (unitsData ?? []) as UnitRow[];
+    const unitIdsByBuilding = new Map<string, string[]>();
+    units.forEach((u: UnitRow) => {
+      const list = unitIdsByBuilding.get(u.building_id) ?? [];
+      list.push(u.id);
+      unitIdsByBuilding.set(u.building_id, list);
+    });
+
+    const { data: ownersData } = await admin.from("unit_owners").select("unit_id,owner_id");
+    const unitOwners = (ownersData ?? []) as UnitOwnerRow[];
+    const ownerIdsByUnit = new Map<string, string>();
+    unitOwners.forEach((o: UnitOwnerRow) => ownerIdsByUnit.set(o.unit_id, o.owner_id));
+
+    const enriched = buildings.map(b => {
+      const site = b.site_id ? siteMap.get(b.site_id) : null;
+      const manager = site?.manager_id ? profileMap.get(site.manager_id) : null;
+      const unitIds = unitIdsByBuilding.get(b.id) ?? [];
+      const ownerIds = [...new Set(unitIds.map(uid => ownerIdsByUnit.get(uid)).filter(Boolean))] as string[];
+      const ownerNames = ownerIds.map(oid => {
+        const p = profileMap.get(oid);
+        return p ? `${p.name} ${p.surname}`.trim() : "";
+      }).filter(Boolean);
+
+      return {
+        id: b.id,
+        name: b.name,
+        site_id: b.site_id,
+        site_name: site?.name ?? null,
+        manager_id: site?.manager_id ?? null,
+        manager_name: manager ? `${manager.name} ${manager.surname}`.trim() : null,
+        owner_names: ownerNames.length ? ownerNames.join(", ") : null,
+      };
+    });
+
+    return NextResponse.json(enriched);
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }

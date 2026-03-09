@@ -3,8 +3,11 @@
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { NotificationItem } from "@/components/NotificationBell";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function OwnerNotificationsPage() {
+  const { locale } = useLocale();
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
 
   useEffect(() => {
@@ -15,10 +18,10 @@ export default function OwnerNotificationsPage() {
 
   return (
     <Card className="mt-2">
-      <CardHeader><CardTitle>Notifications ({notifications.length})</CardTitle></CardHeader>
+      <CardHeader><CardTitle>{t(locale, "notifications.bellTitle")} ({notifications.length})</CardTitle></CardHeader>
       <CardContent>
         {notifications.length === 0 ? (
-          <p className="py-8 text-center text-muted-foreground">No notifications.</p>
+          <p className="py-8 text-center text-muted-foreground">{t(locale, "notifications.noNotificationsYet")}</p>
         ) : (
           <div className="space-y-2">
             {notifications.map(n => (

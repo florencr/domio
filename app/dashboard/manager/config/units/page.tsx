@@ -8,6 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useManagerData } from "../../context";
 import type { Unit } from "../../types";
+import { useLocale } from "@/lib/locale-context";
+import { t } from "@/lib/i18n";
 
 export default function ConfigUnitsPage() {
   const { data, load } = useManagerData();
@@ -19,6 +21,7 @@ export default function ConfigUnitsPage() {
   const [filterBuilding, setFilterBuilding] = useState("all");
 
   const sb = createClient();
+  const { locale } = useLocale();
   const buildingMap = new Map(data.buildings.map(b => [b.id, b.name]));
   const ownerMap = new Map(data.unitOwners.map(uo => [uo.unit_id, uo.owner_id]));
   const tenantMap = new Map(data.unitTenantAssignments.map(a => [a.unit_id, a.tenant_id]));
@@ -50,7 +53,7 @@ export default function ConfigUnitsPage() {
         }),
       });
       const j = await res.json();
-      if (!res.ok) { setMsg({ text: j.error || "Failed to assign owner/tenant", ok: false }); return; }
+      if (!res.ok) { setMsg({ text: j.error || t(locale, "configUnits.failedToAssign"), ok: false }); return; }
     }
     if (inserted?.id) {
       fetch("/api/manager/log-audit", {
@@ -59,7 +62,7 @@ export default function ConfigUnitsPage() {
         body: JSON.stringify({ action: "create", entity_type: "unit", entity_id: inserted.id, entity_label: f.name, new_values: { unit_name: f.name, type: f.type, building_id: f.buildingId } }),
       }).catch(() => {});
     }
-    setMsg({ text: "Unit created.", ok: true });
+    setMsg({ text: t(locale, "configUnits.unitCreated"), ok: true });
     setF({ buildingId: "", name: "", type: "", size: "", entrance: "", floor: "", ownerId: "none", tenantId: "none" });
     setShowCreate(false);
     load();
@@ -92,7 +95,7 @@ export default function ConfigUnitsPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ action: "update", entity_type: "unit", entity_id: editingUnit.id, entity_label: editF.name, new_values: { unit_name: editF.name, type: editF.type } }),
     }).catch(() => {});
-    setMsg({ text: "Unit updated.", ok: true });
+    setMsg({ text: t(locale, "configUnits.unitUpdated"), ok: true });
     setEditingUnit(null);
     load();
   }
@@ -108,7 +111,7 @@ export default function ConfigUnitsPage() {
           body: JSON.stringify({ action: "delete", entity_type: "unit", entity_id: id, entity_label: unit.unit_name }),
         }).catch(() => {});
       }
-      setMsg({ text: "Unit deleted.", ok: true });
+      setMsg({ text: t(locale, "configUnits.unitDeleted"), ok: true });
       setEditingUnit(null);
       load();
     } else setMsg({ text: error.message, ok: false });
@@ -123,45 +126,45 @@ export default function ConfigUnitsPage() {
 
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">Units ({filteredUnits.length})</h3>
+          <h3 className="text-sm font-semibold">{t(locale, "configUnits.units")} ({filteredUnits.length})</h3>
           <Select value={filterBuilding} onValueChange={setFilterBuilding}>
             <SelectTrigger className="h-7 w-44 text-xs"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="all">All buildings</SelectItem>
+              <SelectItem value="all">{t(locale, "configUnits.allBuildings")}</SelectItem>
               {data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
             </SelectContent>
           </Select>
         </div>
         <Button size="sm" onClick={() => { setShowCreate(!showCreate); setEditingUnit(null); }}>
-          {showCreate ? "Cancel" : "+ Add unit"}
+          {showCreate ? t(locale, "common.cancel") : t(locale, "configUnits.addUnit")}
         </Button>
       </div>
 
       {showCreate && (
         <div className="border border-green-200 bg-green-50/20 dark:bg-green-950/20 dark:border-green-800 rounded-lg p-4">
-          <p className="text-base font-semibold mb-3">Add Unit</p>
+          <p className="text-base font-semibold mb-3">{t(locale, "configUnits.addUnitTitle")}</p>
           <form onSubmit={create} className="grid grid-cols-2 md:grid-cols-3 gap-3 items-end">
-            <div><Label className="text-xs">Building</Label>
+            <div><Label className="text-xs">{t(locale, "configUnits.building")}</Label>
               <Select value={f.buildingId} onValueChange={v => setF({ ...f, buildingId: v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select building" /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectBuilding")} /></SelectTrigger>
                 <SelectContent>{data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Unit name</Label><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="AP-101" required className="h-8 text-sm" /></div>
-            <div><Label className="text-xs">Type</Label>
+            <div><Label className="text-xs">{t(locale, "configUnits.unitName")}</Label><Input value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder="AP-101" required className="h-8 text-sm" /></div>
+            <div><Label className="text-xs">{t(locale, "configUnits.unitType")}</Label>
               <Select value={f.type} onValueChange={v => setF({ ...f, type: v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select type" /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectType")} /></SelectTrigger>
                 <SelectContent>{data.unitTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
               </Select>
             </div>
-            <div><Label className="text-xs">Size (m²)</Label><Input type="number" step="0.01" value={f.size} onChange={e => setF({ ...f, size: e.target.value })} className="h-8 text-sm" placeholder="e.g. 75" /></div>
-            <div><Label className="text-xs">Entrance</Label><Input value={f.entrance} onChange={e => setF({ ...f, entrance: e.target.value })} className="h-8 text-sm" placeholder="e.g. A" /></div>
-            <div><Label className="text-xs">Floor</Label><Input value={f.floor} onChange={e => setF({ ...f, floor: e.target.value })} className="h-8 text-sm" placeholder="e.g. 3" /></div>
-            <div className="col-span-2 md:col-span-1"><Label className="text-xs">Owner</Label>
+            <div><Label className="text-xs">{t(locale, "configUnits.sizeM2")}</Label><Input type="number" step="0.01" value={f.size} onChange={e => setF({ ...f, size: e.target.value })} className="h-8 text-sm" placeholder="e.g. 75" /></div>
+            <div><Label className="text-xs">{t(locale, "configUnits.entrance")}</Label><Input value={f.entrance} onChange={e => setF({ ...f, entrance: e.target.value })} className="h-8 text-sm" placeholder="e.g. A" /></div>
+            <div><Label className="text-xs">{t(locale, "configUnits.floor")}</Label><Input value={f.floor} onChange={e => setF({ ...f, floor: e.target.value })} className="h-8 text-sm" placeholder="e.g. 3" /></div>
+            <div className="col-span-2 md:col-span-1"><Label className="text-xs">{t(locale, "configUnits.owner")}</Label>
               <Select value={f.ownerId} onValueChange={v => setF({ ...f, ownerId: v })}>
-                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select owner" /></SelectTrigger>
+                <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectOwner")} /></SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">— No owner —</SelectItem>
+                  <SelectItem value="none">{t(locale, "configUnits.noOwner")}</SelectItem>
                   {owners.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                 </SelectContent>
               </Select>
@@ -176,7 +179,7 @@ export default function ConfigUnitsPage() {
               </Select>
             </div>
             <div className="col-span-2 md:col-span-3 flex gap-2">
-              <Button type="submit" size="sm" disabled={!f.buildingId || !f.type}>Create unit</Button>
+              <Button type="submit" size="sm" disabled={!f.buildingId || !f.type}>{t(locale, "configUnits.createUnit")}</Button>
               <Button type="button" size="sm" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
             </div>
           </form>
@@ -185,18 +188,18 @@ export default function ConfigUnitsPage() {
 
       <div className="grid md:grid-cols-2 gap-4">
         <div className={`overflow-x-auto ${editingUnit ? "md:col-span-1" : "md:col-span-2"}`}>
-          <table className="w-full text-sm">
+          <table className="w-full min-w-full text-sm table-fixed">
             <thead>
               <tr className="border-b bg-muted/40">
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Unit</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Building</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Type</th>
-                <th className="px-4 py-3 text-center font-medium text-muted-foreground">m²</th>
-                <th className="px-4 py-3 text-center font-medium text-muted-foreground">Entr.</th>
-                <th className="px-4 py-3 text-center font-medium text-muted-foreground">Floor</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Owner</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Tenant</th>
-                <th className="px-4 py-3 text-left font-medium text-muted-foreground">Action</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "table.unit")}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "configUnits.building")}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "configUnits.unitType")}</th>
+                <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t(locale, "table.sizeM2")}</th>
+                <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t(locale, "configUnits.entr")}</th>
+                <th className="px-4 py-3 text-center font-medium text-muted-foreground">{t(locale, "configUnits.floor")}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "configUnits.owner")}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "configUnits.tenant")}</th>
+                <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "table.action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -214,7 +217,7 @@ export default function ConfigUnitsPage() {
                     <td className="px-4 py-3 text-center text-muted-foreground">{u.size_m2 ?? <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{u.entrance ?? <span className="text-muted-foreground/30">—</span>}</td>
                     <td className="px-4 py-3 text-center text-muted-foreground">{u.floor ?? <span className="text-muted-foreground/30">—</span>}</td>
-                    <td className="px-4 py-3">{owner ? <span className="text-sm">{owner.name} {owner.surname}</span> : <span className="text-xs text-muted-foreground/50">No owner</span>}</td>
+                    <td className="px-4 py-3">{owner ? <span className="text-sm">{owner.name} {owner.surname}</span> : <span className="text-xs text-muted-foreground/50">{t(locale, "configUnits.noOwnerLabel")}</span>}</td>
                     <td className="px-4 py-3">{tenant ? <span className="text-sm">{tenant.name} {tenant.surname}</span> : <span className="text-xs text-muted-foreground/50">—</span>}</td>
                     <td className="px-4 py-3">
                       <Button size="sm" variant={isActive ? "default" : "ghost"} className="h-7 px-3 text-xs"
@@ -237,14 +240,14 @@ export default function ConfigUnitsPage() {
                             setShowCreate(false);
                           }
                         }}>
-                        {isActive ? "Close" : "Edit"}
+                        {isActive ? t(locale, "common.close") : t(locale, "common.edit")}
                       </Button>
                     </td>
                   </tr>
                 );
               })}
               {!filteredUnits.length && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">No units yet.</td></tr>
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">{t(locale, "configUnits.noUnitsYet")}</td></tr>
               )}
             </tbody>
           </table>
@@ -255,27 +258,27 @@ export default function ConfigUnitsPage() {
             <p className="text-base font-semibold pb-3 border-b">{editingUnit.unit_name} · {buildingMap.get(editingUnit.building_id)}</p>
             <div className="space-y-3 pt-4">
               <div className="grid grid-cols-2 gap-2">
-                <div className="col-span-2"><Label className="text-xs">Building</Label>
+                <div className="col-span-2"><Label className="text-xs">{t(locale, "configUnits.building")}</Label>
                   <Select value={editF.buildingId} onValueChange={v => setEditF({ ...editF, buildingId: v })}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>{data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Unit name</Label><Input value={editF.name} onChange={e => setEditF({ ...editF, name: e.target.value })} className="h-8 text-sm" /></div>
-                <div><Label className="text-xs">Type</Label>
+                <div><Label className="text-xs">{t(locale, "configUnits.unitName")}</Label><Input value={editF.name} onChange={e => setEditF({ ...editF, name: e.target.value })} className="h-8 text-sm" /></div>
+                <div><Label className="text-xs">{t(locale, "configUnits.unitType")}</Label>
                   <Select value={editF.type} onValueChange={v => setEditF({ ...editF, type: v })}>
                     <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
                     <SelectContent>{data.unitTypes.map(t => <SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>)}</SelectContent>
                   </Select>
                 </div>
-                <div><Label className="text-xs">Size (m²)</Label><Input type="number" step="0.01" value={editF.size} onChange={e => setEditF({ ...editF, size: e.target.value })} className="h-8 text-sm" /></div>
-                <div><Label className="text-xs">Entrance</Label><Input value={editF.entrance} onChange={e => setEditF({ ...editF, entrance: e.target.value })} className="h-8 text-sm" placeholder="e.g. A" /></div>
-                <div className="col-span-2"><Label className="text-xs">Floor</Label><Input value={editF.floor} onChange={e => setEditF({ ...editF, floor: e.target.value })} className="h-8 text-sm" placeholder="e.g. 3" /></div>
-                <div className="col-span-2"><Label className="text-xs">Owner</Label>
+                <div><Label className="text-xs">{t(locale, "configUnits.sizeM2")}</Label><Input type="number" step="0.01" value={editF.size} onChange={e => setEditF({ ...editF, size: e.target.value })} className="h-8 text-sm" /></div>
+                <div><Label className="text-xs">{t(locale, "configUnits.entrance")}</Label><Input value={editF.entrance} onChange={e => setEditF({ ...editF, entrance: e.target.value })} className="h-8 text-sm" placeholder="e.g. A" /></div>
+                <div className="col-span-2"><Label className="text-xs">{t(locale, "configUnits.floor")}</Label><Input value={editF.floor} onChange={e => setEditF({ ...editF, floor: e.target.value })} className="h-8 text-sm" placeholder="e.g. 3" /></div>
+                <div className="col-span-2"><Label className="text-xs">{t(locale, "configUnits.owner")}</Label>
                   <Select value={editF.ownerId} onValueChange={v => setEditF({ ...editF, ownerId: v })}>
-                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select owner" /></SelectTrigger>
+                    <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectOwner")} /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="none">— No owner —</SelectItem>
+                      <SelectItem value="none">{t(locale, "configUnits.noOwner")}</SelectItem>
                       {owners.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -291,11 +294,11 @@ export default function ConfigUnitsPage() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Button size="sm" className="flex-1" onClick={saveEdit}>Save changes</Button>
-                <Button size="sm" variant="outline" onClick={() => setEditingUnit(null)}>Cancel</Button>
+                <Button size="sm" className="flex-1" onClick={saveEdit}>{t(locale, "common.saveChanges")}</Button>
+                <Button size="sm" variant="outline" onClick={() => setEditingUnit(null)}>{t(locale, "common.cancel")}</Button>
               </div>
               <div className="pt-2 border-t">
-                <Button size="sm" variant="destructive" className="w-full" onClick={() => del(editingUnit.id)}>Delete unit</Button>
+                <Button size="sm" variant="destructive" className="w-full" onClick={() => del(editingUnit.id)}>{t(locale, "configUnits.deleteUnit")}</Button>
               </div>
             </div>
           </div>

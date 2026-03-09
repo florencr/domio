@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function ManagerConfigPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/dashboard/manager/config/buildings");
+    router.replace("/dashboard/manager/config/account");
   }, [router]);
   return (
     <div className="min-h-[200px] flex items-center justify-center">

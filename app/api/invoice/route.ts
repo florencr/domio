@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { t } from "@/lib/i18n";
 
 export const maxDuration = 60;
 import PDFDocument from "pdfkit";
@@ -15,7 +16,6 @@ function adminClient() {
   );
 }
 
-const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 
 type InvoiceSite = { id?: string; name?: string; address?: string; vat_account?: string; bank_name?: string; iban?: string; swift_code?: string; tax_amount?: number | null; manager_id?: string } | null;
 
@@ -34,6 +34,9 @@ export async function GET(request: Request) {
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const admin = adminClient();
+
+    const { data: userProfile } = await admin.from("profiles").select("locale").eq("id", user.id).single();
+    const locale: "en" | "al" = (userProfile as { locale?: string } | null)?.locale === "al" ? "al" : "en";
 
     let bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; paid_at: string | null; reference_code?: string }[];
     let site: InvoiceSite = null;
@@ -143,14 +146,15 @@ export async function GET(request: Request) {
       managerProfile = (await admin.from("profiles").select("name, surname, email, phone").eq("id", site.manager_id).single()).data;
     }
 
-    const periodLabel = `${MONTHS[bills[0].period_month - 1]} ${bills[0].period_year}`;
-    const periodShort = `${MONTHS[bills[0].period_month - 1].slice(0, 3)}${String(bills[0].period_year).slice(-2)}`;
+    const monthName = t(locale, `common.month${bills[0].period_month}`);
+    const periodLabel = `${monthName} ${bills[0].period_year}`;
+    const periodShort = `${monthName.slice(0, 3)}${String(bills[0].period_year).slice(-2)}`;
     const subtotal = bills.reduce((s, b) => s + Number(b.total_amount), 0);
     const taxPct = site?.tax_amount != null ? Number(site.tax_amount) : 0;
     const taxAmount = Math.round((subtotal * taxPct / 100) * 100) / 100;
     const grandTotal = Math.round((subtotal + taxAmount) * 100) / 100;
     const allPaid = bills.every(b => b.paid_at);
-    const paidDate = allPaid && bills[0].paid_at ? new Date(bills[0].paid_at).toLocaleDateString("en-GB") : null;
+    const paidDate = allPaid && bills[0].paid_at ? new Date(bills[0].paid_at).toLocaleDateString(locale === "al" ? "sq-AL" : "en-GB") : null;
 
     const payerId = consolidated ? (paymentResponsibleId ?? user.id) : user.id;
     const siteId = site?.id ?? null;
@@ -210,51 +214,52 @@ const logoPath = path.join(process.cwd(), "public", "domio-icon.webp");
     } else if (fs.existsSync(logoPathFallback)) {
       doc.image(logoPathFallback, 50, y, { width: 100 });
     }
-    doc.fontSize(22).fillColor("black").text("INVOICE", 50, y, { width: pageWidth, align: "right" });
+    doc.fontSize(22).fillColor("black").text(t(locale, "invoice.title"), 50, y, { width: pageWidth, align: "right" });
     y += 55;
     doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
     y += 18;
 
     doc.fontSize(10);
-    doc.font("Helvetica-Bold").text("Issued by (invoice authority)", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.issuedBy"), 50, y);
     doc.font("Helvetica");
     y += 14;
-    doc.text("Site:", 50, y);
+    doc.text(t(locale, "invoice.site"), 50, y);
     doc.text(site?.name ?? "—", 120, y);
     y += 12;
-    doc.text("Address:", 50, y);
+    doc.text(t(locale, "invoice.address"), 50, y);
     doc.text(site?.address ?? "—", 120, y);
     y += 12;
-    doc.text("Manager:", 50, y);
+    doc.text(t(locale, "invoice.manager"), 50, y);
     const managerName = managerProfile ? (`${managerProfile.name ?? ""} ${managerProfile.surname ?? ""}`.trim() || "—") : "—";
     doc.text(managerName, 120, y);
     y += 12;
-    doc.text("VAT:", 50, y);
+    doc.text(t(locale, "invoice.vat"), 50, y);
     doc.text(site?.vat_account ?? "—", 120, y);
     y += 12;
-    doc.text("Email:", 50, y);
+    doc.text(t(locale, "invoice.email"), 50, y);
     doc.text(managerProfile?.email ?? "—", 120, y);
     y += 12;
-    doc.text("Phone:", 50, y);
+    doc.text(t(locale, "invoice.phone"), 50, y);
     doc.text(managerProfile?.phone ?? "—", 120, y);
     y += 18;
 
-    doc.font("Helvetica-Bold").text("Billing period:", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.billingPeriod"), 50, y);
     doc.font("Helvetica").text(periodLabel, 150, y);
-    doc.font("Helvetica-Bold").text("Issued date:", 280, y);
-    doc.font("Helvetica").text(issuedDate.toLocaleDateString("en-GB"), 360, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.issuedDate"), 280, y);
+    doc.font("Helvetica").text(issuedDate.toLocaleDateString(locale === "al" ? "sq-AL" : "en-GB"), 360, y);
     y += 14;
-    doc.font("Helvetica-Bold").text("Reference:", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.reference"), 50, y);
     doc.font("Helvetica").text(refCode, 150, y);
     y += 28;
 
-    doc.font("Helvetica-Bold").text("Bill to:", 50, y);
-    doc.font("Helvetica").text(`${billToName} (${billToRole})`, 150, y);
+    const billToRoleLabel = billToRole === "Owner" ? t(locale, "common.owner") : t(locale, "common.tenant");
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.billTo"), 50, y);
+    doc.font("Helvetica").text(`${billToName} (${billToRoleLabel})`, 150, y);
     y += 14;
     if (billToEmail) { doc.text(billToEmail, 50, y); y += 6; }
     y += 12;
 
-    doc.font("Helvetica-Bold").text("Itemized bill", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.itemizedBill"), 50, y);
     y += 18;
 
     const itemizedRows: { desc: string; qty: string; price: string; amt: string }[] = [];
@@ -286,10 +291,10 @@ const logoPath = path.join(process.cwd(), "public", "domio-icon.webp");
       const colPrice = 330;
       const colAmt = 420;
       doc.fontSize(9).fillColor("#666666");
-      doc.text("Description", colDesc, y);
-      doc.text("Qty", colQty, y);
-      doc.text("Price", colPrice, y);
-      doc.text("Amount", colAmt, y);
+      doc.text(t(locale, "invoice.description"), colDesc, y);
+      doc.text(t(locale, "invoice.qty"), colQty, y);
+      doc.text(t(locale, "invoice.price"), colPrice, y);
+      doc.text(t(locale, "invoice.amount"), colAmt, y);
       y += 14;
       doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
       y += 12;
@@ -313,37 +318,37 @@ const logoPath = path.join(process.cwd(), "public", "domio-icon.webp");
 
     doc.moveTo(50, y).lineTo(doc.page.width - 50, y).stroke("#e5e5e5");
     y += 14;
-    doc.font("Helvetica").text("Subtotal:", 50, y);
+    doc.font("Helvetica").text(t(locale, "invoice.subtotal"), 50, y);
     doc.text(subtotal.toFixed(2), 420, y, { align: "right", width: 80 });
     y += 16;
-    doc.text(`Tax (${taxPct}%):`, 50, y);
+    doc.text(t(locale, "invoice.tax", { pct: String(taxPct) }), 50, y);
     doc.text(taxAmount.toFixed(2), 420, y, { align: "right", width: 80 });
     y += 16;
-    doc.font("Helvetica-Bold").text("Grand total:", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.grandTotal"), 50, y);
     doc.text(grandTotal.toFixed(2), 420, y, { align: "right", width: 80 });
     y += 24;
 
-    doc.font("Helvetica-Bold").text("Bank account & payment methods", 50, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.bankSection"), 50, y);
     doc.font("Helvetica");
     y += 14;
-    doc.text("Bank name:", 50, y);
+    doc.text(t(locale, "invoice.bankName"), 50, y);
     doc.text(site?.bank_name ?? "—", 120, y);
     y += 12;
-    doc.text("IBAN:", 50, y);
+    doc.text(t(locale, "invoice.iban"), 50, y);
     doc.text(site?.iban ?? "—", 120, y);
     y += 12;
-    doc.text("SWIFT:", 50, y);
+    doc.text(t(locale, "invoice.swift"), 50, y);
     doc.text(site?.swift_code ?? "—", 120, y);
     y += 12;
-    doc.text("Payment method: Bank transfer. Use reference " + refCode + " when paying.", 50, y);
+    doc.text(t(locale, "invoice.paymentMethod", { ref: refCode }), 50, y);
     y += 24;
 
-    doc.font("Helvetica-Bold").text("Payment due date:", 50, y);
-    doc.font("Helvetica").text(dueDate.toLocaleDateString("en-GB") + " (1 month after issued)", 200, y);
+    doc.font("Helvetica-Bold").text(t(locale, "invoice.paymentDueDate"), 50, y);
+    doc.font("Helvetica").text(dueDate.toLocaleDateString(locale === "al" ? "sq-AL" : "en-GB") + " (" + t(locale, "invoice.dueDateNote") + ")", 200, y);
     y += 20;
 
     doc.fontSize(9).fillColor("#999999").text(
-      allPaid && paidDate ? `Paid on ${paidDate}` : "Status: Unpaid",
+      allPaid && paidDate ? t(locale, "invoice.paidOn", { date: paidDate }) : t(locale, "invoice.statusUnpaid"),
       50, y, { align: "center", width: pageWidth }
     );
 
