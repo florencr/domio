@@ -51,6 +51,7 @@ export async function GET(request: Request) {
         unitTenantAssignments: [],
         tenants: tenantsRes.data ?? [],
         siteNames: siteNamesEmpty,
+        sites: asnSites ?? [],
       };
       if (debug) body._debug = { userId: user.id, unitIds: [], billsCount: 0 };
       return NextResponse.json(body);
@@ -91,6 +92,7 @@ export async function GET(request: Request) {
       unitTenantAssignments: assignmentsRes.data ?? [],
       tenants: tenantsRes.data ?? [],
       siteNames,
+      sites: sitesData ?? [],
     };
     if (debug) body._debug = { userId: user.id, unitIds, unitsCount: (unitsRes.data ?? []).length, rawBillsCount: rawBills.length, billsCount: allBills.length };
     return NextResponse.json(body, { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } });

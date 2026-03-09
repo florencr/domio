@@ -20,6 +20,7 @@ import { t } from "@/lib/i18n";
 type TenantData = {
   profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
   siteNames: string[];
+  sites: { id: string; name: string }[];
   units: { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance?: string | null; floor?: string | null }[];
   allUnits: { id: string; unit_name: string }[];
   buildings: { id: string; name: string; site_id?: string | null }[];
@@ -44,7 +45,7 @@ function expenseRef(e: { title?: string; category?: string; period_month?: numbe
 export default function TenantPage() {
   const router = useRouter();
   const { locale } = useLocale();
-  const [data, setData] = useState<TenantData>({ profile: null, siteNames: [], units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [] });
+  const [data, setData] = useState<TenantData>({ profile: null, siteNames: [], sites: [], units: [], allUnits: [], buildings: [], bills: [], expenses: [], unitTenantAssignments: [] });
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState("billing");
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
@@ -103,6 +104,7 @@ export default function TenantPage() {
     setData({
       profile,
       siteNames: json.siteNames ?? [],
+      sites: json.sites ?? [],
       units: json.units ?? [],
       allUnits: json.allUnits ?? [],
       buildings: json.buildings ?? [],
@@ -159,8 +161,14 @@ export default function TenantPage() {
     <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">{t(locale, "common.loading")}</p></div>
   );
 
-  const { profile, units, buildings, allUnits, bills, expenses } = data;
+  const { profile, units, buildings, sites, allUnits, bills, expenses } = data;
   const buildingMap = new Map(buildings.map(b => [b.id, b.name]));
+  const siteMap = new Map(sites.map((s: { id: string; name: string }) => [s.id, s.name]));
+  const getSiteName = (buildingId: string) => {
+    const building = buildings.find((b: { id: string; site_id?: string | null }) => b.id === buildingId);
+    if (!building?.site_id) return "";
+    return siteMap.get(building.site_id) ?? "";
+  };
   const unitMap = new Map(allUnits.map(u => [u.id, u]));
   const unitIdSet = new Set(units.map(u => u.id));
   const myBills = bills.filter(b => unitIdSet.has(b.unit_id));
@@ -178,7 +186,7 @@ export default function TenantPage() {
     ...expenses.filter(e => e.period_month != null).map(e => ({ key:`e-${e.id}`, date: `${e.period_year!}-${String(e.period_month!).padStart(2,"0")}`, type:"expense" as const, label:`${e.title} · ${e.vendor}`, ref: (e as {reference_code?: string}).reference_code ?? expenseRef(e), amount: Number(e.amount), status: (e as {paid_at?: string | null}).paid_at ? "Paid" : "Unpaid" })),
   ];
   const getUnitValue = (u: { id: string; unit_name: string; building_id: string; type: string; size_m2: number | null; entrance?: string | null; floor?: string | null }, col: string): string | number => {
-    switch (col) { case "unit": return u.unit_name; case "building": return buildingMap.get(u.building_id) ?? ""; case "type": return u.type; case "entrance": return u.entrance ?? ""; case "floor": return u.floor ?? ""; case "size": return u.size_m2 ?? 0; default: return ""; }
+    switch (col) { case "unit": return u.unit_name; case "site": return getSiteName(u.building_id); case "building": return buildingMap.get(u.building_id) ?? ""; case "type": return u.type; case "entrance": return u.entrance ?? ""; case "floor": return u.floor ?? ""; case "size": return u.size_m2 ?? 0; default: return ""; }
   };
   const sortedUnits = unitsSortCol ? sortBy(units, unitsSortCol, unitsSortDir, getUnitValue) : units;
   const handleUnitsSort = (col: string) => { setUnitsSortDir(prev => unitsSortCol === col && prev === "asc" ? "desc" : "asc"); setUnitsSortCol(col); };
@@ -267,10 +275,10 @@ export default function TenantPage() {
                 {profile?.phone && <p className="text-sm text-muted-foreground"><a href={`tel:${profile.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{profile.phone}</a></p>}
               </div>
               <DropdownMenuSeparator />
-              <Link href="/dashboard/tenant/preferences">
+              <Link href="/dashboard/tenant/account">
                 <DropdownMenuItem className="gap-2 cursor-pointer">
-                  <SlidersHorizontal className="size-4" />
-                  {t(locale, "common.preferences")}
+                  <User className="size-4" />
+                  {t(locale, "nav.config.account")}
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer">
@@ -345,36 +353,39 @@ export default function TenantPage() {
           <div className="space-y-4 mt-2">
           <Card>
             <CardHeader><CardTitle>{t(locale, "headers.myUnits")} ({units.length})</CardTitle></CardHeader>
-            <CardContent className="overflow-x-auto">
-              <table className="w-full min-w-full text-sm table-fixed">
+            <CardContent className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+              <table className="w-full text-sm table-fixed">
                 <colgroup>
-                  <col style={{ width: "16%" }} />
-                  <col style={{ width: "20%" }} />
                   <col style={{ width: "14%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "12%" }} />
-                  <col style={{ width: "12%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "16%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
+                  <col style={{ width: "14%" }} />
                 </colgroup>
                 <thead><tr className="border-b text-left">
-                  <SortableTh column="unit" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
-                  <SortableTh column="building" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.building")}</SortableTh>
-                  <SortableTh column="type" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.type")}</SortableTh>
-                  <SortableTh column="entrance" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.entrance")}</SortableTh>
-                  <SortableTh column="floor" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.floor")}</SortableTh>
-                  <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.sizeM2")}</SortableTh>
+                  <SortableTh column="unit" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.unit")}</SortableTh>
+                  <SortableTh column="site" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "common.site")}</SortableTh>
+                  <SortableTh column="building" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.building")}</SortableTh>
+                  <SortableTh column="type" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.type")}</SortableTh>
+                  <SortableTh column="entrance" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.entrance")}</SortableTh>
+                  <SortableTh column="floor" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.floor")}</SortableTh>
+                  <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.sizeM2")}</SortableTh>
                 </tr></thead>
                 <tbody className="divide-y divide-border">
                   {sortedUnits.map(u => (
                     <tr key={u.id} className="hover:bg-muted/30">
-                      <td className="py-3 pr-4 font-medium">{u.unit_name}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{buildingMap.get(u.building_id) ?? "—"}</td>
-                      <td className="py-3 pr-4"><span className="text-xs bg-muted px-2 py-0.5 rounded-full">{u.type}</span></td>
-                      <td className="py-3 pr-4 text-center text-muted-foreground">{u.entrance ?? "—"}</td>
-                      <td className="py-3 pr-4 text-center text-muted-foreground">{u.floor ?? "—"}</td>
-                      <td className="py-3 pr-4 text-center">{u.size_m2 ?? "—"}</td>
+                      <td className="py-3 pr-2 font-medium break-words">{u.unit_name}</td>
+                      <td className="py-3 pr-2 text-muted-foreground break-words">{getSiteName(u.building_id) || "—"}</td>
+                      <td className="py-3 pr-2 text-muted-foreground break-words">{buildingMap.get(u.building_id) ?? "—"}</td>
+                      <td className="py-3 pr-2"><span className="text-xs bg-muted px-2 py-0.5 rounded-full">{u.type}</span></td>
+                      <td className="py-3 pr-2 text-center text-muted-foreground">{u.entrance ?? "—"}</td>
+                      <td className="py-3 pr-2 text-center text-muted-foreground">{u.floor ?? "—"}</td>
+                      <td className="py-3 pr-2 text-center">{u.size_m2 ?? "—"}</td>
                     </tr>
                   ))}
-                  {!units.length && <tr><td colSpan={6} className="py-8 text-center text-muted-foreground">{t(locale, "tenant.noUnitsAssigned")}</td></tr>}
+                  {!units.length && <tr><td colSpan={7} className="py-8 text-center text-muted-foreground">{t(locale, "tenant.noUnitsAssigned")}</td></tr>}
                 </tbody>
               </table>
             </CardContent>
@@ -455,23 +466,30 @@ export default function TenantPage() {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                  <table className="w-full min-w-full text-sm table-fixed">
+                <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+                  <table className="w-full text-sm table-fixed">
+                    <colgroup>
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "18%" }} />
+                      <col style={{ width: "24%" }} />
+                      <col style={{ width: "22%" }} />
+                      <col style={{ width: "18%" }} />
+                    </colgroup>
                     <thead><tr className="border-b text-left">
-                      <SortableTh column="ref" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
-                      <SortableTh column="paidOn" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
-                      <SortableTh column="unit" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
-                      <SortableTh column="period" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
-                      <SortableTh column="amount" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
+                      <SortableTh column="ref" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.reference")}</SortableTh>
+                      <SortableTh column="paidOn" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
+                      <SortableTh column="unit" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.unit")}</SortableTh>
+                      <SortableTh column="period" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.period")}</SortableTh>
+                      <SortableTh column="amount" sortCol={paymentSortCol} sortDir={paymentSortDir} onSort={handlePaymentSort} className="pb-3 pr-2 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
                     </tr></thead>
                     <tbody className="divide-y divide-border">
                       {paidSorted.map(b => (
                         <tr key={b.id} className="hover:bg-muted/30">
-                          <td className="py-3 pr-4 font-mono text-xs select-text">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
-                          <td className="py-3 pr-4 font-medium">{new Date(b.paid_at!).toLocaleDateString()}</td>
-                          <td className="py-3 pr-4">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
-                          <td className="py-3 pr-4 text-muted-foreground">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
-                          <td className="py-3 text-right font-semibold text-green-600">{Number(b.total_amount).toFixed(2)}</td>
+                          <td className="py-3 pr-2 font-mono text-xs select-text break-words">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                          <td className="py-3 pr-2 font-medium">{new Date(b.paid_at!).toLocaleDateString()}</td>
+                          <td className="py-3 pr-2 break-words">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
+                          <td className="py-3 pr-2 text-muted-foreground break-words">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
+                          <td className="py-3 pr-2 text-right font-semibold text-green-600">{Number(b.total_amount).toFixed(2)}</td>
                         </tr>
                       ))}
                       {!paidSorted.length && <tr><td colSpan={5} className="py-8 text-center text-muted-foreground">{paidRaw.length === 0 && myPaidBills.length > 0 ? t(locale, "owner.noPaymentsMatchFilters") : t(locale, "owner.noPaymentsYet")}</td></tr>}
@@ -529,17 +547,27 @@ export default function TenantPage() {
                     </div>
                   </div>
                 </div>
-                <div className="overflow-x-auto">
-                <table className="w-full min-w-full text-sm table-fixed">
+                <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+                <table className="w-full text-sm table-fixed">
+                  <colgroup>
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "14%" }} />
+                    <col style={{ width: "10%" }} />
+                    <col style={{ width: "12%" }} />
+                    <col style={{ width: "11%" }} />
+                    <col style={{ width: "9%" }} />
+                    <col style={{ width: "22%" }} />
+                  </colgroup>
                   <thead><tr className="border-b text-left">
-                    <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
-                    <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
-                    <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
-                    <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
-                    <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
-                    <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
-                    <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "owner.pdf")}</th>
-                    <th className="pb-3 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
+                    <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.reference")}</SortableTh>
+                    <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.period")}</SortableTh>
+                    <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.unit")}</SortableTh>
+                    <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
+                    <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.status")}</SortableTh>
+                    <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
+                    <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "owner.pdf")}</th>
+                    <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
                   </tr></thead>
                   <tbody className="divide-y divide-border">
                     {(() => {
@@ -558,20 +586,20 @@ export default function TenantPage() {
                         const uploadKey = periodKey;
                         return (
                           <tr key={b.id} className="hover:bg-muted/30">
-                            <td className="py-3 pr-4 font-mono text-xs select-text">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
-                            <td className="py-3 pr-4 font-medium">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
-                            <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
-                            <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
-                            <td className="py-3 pr-4">
+                            <td className="py-3 pr-2 font-mono text-xs select-text break-words">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                            <td className="py-3 pr-2 font-medium break-words">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
+                            <td className="py-3 pr-2 text-muted-foreground break-words">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
+                            <td className="py-3 pr-2 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
+                            <td className="py-3 pr-2">
                               {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ {t(locale, "filters.paid")}</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.inProcess")}</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.unpaid")}</span>}
                             </td>
-                            <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
-                            <td className="py-3 pr-4">
+                            <td className="py-3 pr-2 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
+                            <td className="py-3 pr-2">
                               {isFirstInPeriod ? (
                                 <a href={`/api/invoice?periodMonth=${b.period_month}&periodYear=${b.period_year}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><Download className="size-3" /> {t(locale, "owner.pdf")}</a>
                               ) : "—"}
                             </td>
-                            <td className="py-3">
+                            <td className="py-3 pr-2">
                               {isFirstInPeriod ? (
                                 <div className="flex flex-col gap-1">
                                   {anyReceipt && (

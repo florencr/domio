@@ -307,22 +307,36 @@ export default function ManagerBillingPage() {
               </div>
             </div>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full text-sm table-fixed">
+          <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+            <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "7%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "6%" }} />
+              <col style={{ width: "15%" }} />
+            </colgroup>
             <thead>
               <tr className="border-b text-left">
-                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
-                <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
-                <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
-                <SortableTh column="building" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.building")}</SortableTh>
-                <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "common.owner")}</SortableTh>
-                <SortableTh column="billTo" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.billTo")}</SortableTh>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.type")}</th>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.description")}</th>
-                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
-                <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
-                <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.slip")}</th>
-                <th className="pb-3 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
+                <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.reference")}</SortableTh>
+                <SortableTh column="period" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.period")}</SortableTh>
+                <SortableTh column="unit" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.unit")}</SortableTh>
+                <SortableTh column="building" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.building")}</SortableTh>
+                <SortableTh column="owner" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "common.owner")}</SortableTh>
+                <SortableTh column="billTo" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.billTo")}</SortableTh>
+                <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.type")}</th>
+                <th className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.description")}</th>
+                <SortableTh column="amount" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground" align="right">{t(locale, "table.amount")}</SortableTh>
+                <SortableTh column="status" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
+                <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.slip")}</th>
+                <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
@@ -340,36 +354,36 @@ export default function ManagerBillingPage() {
                 const lineAmount = line != null ? Number(line.amount) : Number(b.total_amount);
                 return (
                   <tr key={line ? `${b.id}-${lineIndex}` : b.id} className="hover:bg-muted/30 transition-colors">
-                    <td className="py-3 pr-4 font-mono text-xs select-text">{displayRef}</td>
-                    <td className="py-3 pr-4 font-medium">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
-                    <td className="py-3 pr-4">{unit?.unit_name ?? "—"}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
-                    <td className="py-3 pr-4 text-muted-foreground">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
-                    <td className="py-3 pr-4">
+                    <td className="py-3 pr-2 font-mono text-xs select-text break-words">{displayRef}</td>
+                    <td className="py-3 pr-2 font-medium break-words">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
+                    <td className="py-3 pr-2 break-words">{unit?.unit_name ?? "—"}</td>
+                    <td className="py-3 pr-2 text-muted-foreground break-words">{unit ? buildingMap.get(unit.building_id)??"—" : "—"}</td>
+                    <td className="py-3 pr-2 text-muted-foreground break-words">{owner ? `${owner.name} ${owner.surname}` : <span className="text-xs text-amber-600">No owner</span>}</td>
+                    <td className="py-3 pr-2 text-muted-foreground break-words">{billTo ? `${billTo.name} ${billTo.surname}` : <span className="text-xs text-muted-foreground">Owner</span>}</td>
+                    <td className="py-3 pr-2">
                       {lineTypeLabel ? (
                         <span className={`inline-block text-[10px] font-medium px-1.5 py-0.5 rounded ${line?.line_type === "manual" ? "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-400" : "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-400"}`}>
                           {lineTypeLabel}
                         </span>
                       ) : "—"}
                     </td>
-                    <td className="py-3 pr-4 text-muted-foreground">{lineDesc}</td>
-                    <td className="py-3 pr-4 text-right font-semibold tabular-nums">{lineAmount.toFixed(2)}</td>
-                      <td className="py-3 pr-4">
+                    <td className="py-3 pr-2 text-muted-foreground break-words">{lineDesc}</td>
+                    <td className="py-3 pr-2 text-right font-semibold tabular-nums">{lineAmount.toFixed(2)}</td>
+                      <td className="py-3 pr-2">
                         {b.paid_at
                           ? <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ {t(locale, "filters.paid")}</span>
                           : b.status === "in_process"
                           ? <span className="inline-flex items-center gap-1 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.inProcess")}</span>
                           : <span className="inline-flex items-center gap-1 text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.unpaid")}</span>}
                       </td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-2">
                         {(b.receipt_url || b.receipt_path) ? (
                           <a href={`/api/receipt?billId=${b.id}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><FileText className="size-3" /> View</a>
                         ) : (
                           <span className="text-xs text-muted-foreground">—</span>
                         )}
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 pr-2">
                         {(() => {
                           const k = ownerId ? `${ownerId}-${b.period_month}-${b.period_year}` : "";
                           const count = ownerId ? ownerPeriodCount.get(k) ?? 1 : 1;

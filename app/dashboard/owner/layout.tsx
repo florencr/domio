@@ -55,7 +55,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
         <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 dark:bg-background/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
           <Link href="/dashboard/owner" className="flex items-center gap-2">
             <DomioLogo className="h-9 w-auto shrink-0" />
-            <span className="text-sm font-medium text-muted-foreground whitespace-nowrap">{t(locale, "owner.ownerDashboard")}</span>
+            <span className="hidden md:inline text-sm font-medium text-muted-foreground whitespace-nowrap">{t(locale, "owner.ownerDashboard")}</span>
           </Link>
           <div className="flex items-center gap-2 md:gap-2">
             <Link href="/dashboard/owner/preferences">
@@ -64,9 +64,9 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
             <NotificationBell onSeeAllClick={() => router.push("/dashboard/owner/notifications")} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="ghost" className="h-9 w-9 md:w-auto md:px-3 md:gap-2">
+                <Button variant="ghost" className="h-9 gap-2 px-2 md:px-3">
                   <User className="size-5 shrink-0" />
-                  <span className="hidden md:inline truncate max-w-[140px]">{profile?.name} {profile?.surname}</span>
+                  <span className="truncate max-w-[100px] md:max-w-[140px]">{profile?.name ?? ""}</span>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-64">
@@ -78,10 +78,10 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
                   {profile?.phone && <p className="text-sm text-muted-foreground"><a href={`tel:${profile.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{profile.phone}</a></p>}
                 </div>
                 <DropdownMenuSeparator />
-                <Link href="/dashboard/owner/preferences">
+                <Link href="/dashboard/owner/account">
                   <DropdownMenuItem className="gap-2 cursor-pointer">
-                    <SlidersHorizontal className="size-4" />
-                    {t(locale, "common.preferences")}
+                    <User className="size-4" />
+                    {t(locale, "nav.config.account")}
                   </DropdownMenuItem>
                 </Link>
                 <DropdownMenuItem onClick={handleSignOut} className="gap-2 cursor-pointer">

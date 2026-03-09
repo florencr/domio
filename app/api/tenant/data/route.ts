@@ -39,6 +39,7 @@ export async function GET() {
         expenses: [],
         unitTenantAssignments: [],
         siteNames: [],
+        sites: [],
       });
     }
 
@@ -74,6 +75,7 @@ export async function GET() {
       expenses: expensesRes.data ?? [],
       unitTenantAssignments: assignments,
       siteNames,
+      sites: sitesData ?? [],
     }, { headers: { "Cache-Control": "no-store, no-cache, must-revalidate" } });
   } catch (error) {
     return NextResponse.json({ error: error instanceof Error ? error.message : "Unknown error" }, { status: 500 });

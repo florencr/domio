@@ -403,6 +403,13 @@
     "categoryCreated": "Category created.",
     "cannotDeleteUsedInServices": "Cannot delete — used in {count} service(s)."
   },
+  "profileAccount": {
+    "title": "Account",
+    "description": "Update your contact email, phone and password.",
+    "loginEmail": "Login email (cannot be changed)",
+    "contactEmail": "Contact email (optional)",
+    "saveSuccess": "Saved successfully."
+  },
   "managerAccount": {
     "title": "Manager account",
     "description": "Update your phone, VAT, tax, bank details and password.",

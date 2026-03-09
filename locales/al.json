@@ -403,6 +403,13 @@
     "categoryCreated": "Kategoria u krijua.",
     "cannotDeleteUsedInServices": "Nuk mund të fshihet — përdoret në {count} shërbim(e)."
   },
+  "profileAccount": {
+    "title": "Llogaria",
+    "description": "Përditësoni email-in e kontaktit, telefonin dhe fjalëkalimin.",
+    "loginEmail": "Email për hyrje (nuk mund të ndryshohet)",
+    "contactEmail": "Email kontakti (opsional)",
+    "saveSuccess": "U ruajt me sukses."
+  },
   "managerAccount": {
     "title": "Llogaria e menaxherit",
     "description": "Përditësoni telefonin, TVSH-në, taksën, detajet e bankës dhe fjalëkalimin.",

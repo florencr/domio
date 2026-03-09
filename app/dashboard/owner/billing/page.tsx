@@ -128,18 +128,29 @@ export default function OwnerBillingPage() {
               </div>
             </div>
           </div>
-          <div className="overflow-x-auto">
-          <table className="w-full min-w-full text-sm table-fixed">
+          <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+          <table className="w-full text-sm table-fixed">
+            <colgroup>
+              <col style={{ width: "10%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "12%" }} />
+              <col style={{ width: "9%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "11%" }} />
+              <col style={{ width: "8%" }} />
+              <col style={{ width: "15%" }} />
+            </colgroup>
             <thead><tr className="border-b text-left">
-              <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
-              <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>
-              <SortableTh column="billTo" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.billTo")}</SortableTh>
-              <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.unit")}</SortableTh>
-              <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
-              <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.status")}</SortableTh>
-              <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
-              <th className="pb-3 pr-4 font-medium text-muted-foreground">PDF</th>
-              <th className="pb-3 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
+              <SortableTh column="ref" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.reference")}</SortableTh>
+              <SortableTh column="period" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.period")}</SortableTh>
+              <SortableTh column="billTo" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.billTo")}</SortableTh>
+              <SortableTh column="unit" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.unit")}</SortableTh>
+              <SortableTh column="amount" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground text-right" align="right">{t(locale, "table.amount")}</SortableTh>
+              <SortableTh column="status" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.status")}</SortableTh>
+              <SortableTh column="paidOn" sortCol={billsSortCol} sortDir={billsSortDir} onSort={handleBillsSort} className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
+              <th className="pb-3 pr-2 font-medium text-muted-foreground">PDF</th>
+              <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.action")}</th>
             </tr></thead>
             <tbody className="divide-y divide-border">
               {(() => {
@@ -155,21 +166,21 @@ export default function OwnerBillingPage() {
                   const uploadKey = `${b.period_month}-${b.period_year}-${payerId}`;
                   return (
                     <tr key={b.id} className="hover:bg-muted/30">
-                      <td className="py-3 pr-4 font-mono text-xs select-text">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
-                      <td className="py-3 pr-4 font-medium">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
-                      <td className="py-3 pr-4 font-medium">{billToName}</td>
-                      <td className="py-3 pr-4 text-muted-foreground">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
-                      <td className="py-3 pr-4 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-2 font-mono text-xs select-text break-words">{(b as { reference_code?: string }).reference_code ?? "—"}</td>
+                      <td className="py-3 pr-2 font-medium break-words">{t(locale, `common.month${b.period_month}`)} {b.period_year}</td>
+                      <td className="py-3 pr-2 font-medium break-words">{billToName}</td>
+                      <td className="py-3 pr-2 text-muted-foreground break-words">{unitMap.get(b.unit_id)?.unit_name ?? "—"}</td>
+                      <td className="py-3 pr-2 text-right font-semibold">{Number(b.total_amount).toFixed(2)}</td>
+                      <td className="py-3 pr-2">
                         {b.paid_at ? <span className="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-medium">✓ {t(locale, "filters.paid")}</span> : b.status === "in_process" ? <span className="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.inProcess")}</span> : <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded-full font-medium">{t(locale, "filters.unpaid")}</span>}
                       </td>
-                      <td className="py-3 pr-4 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
-                      <td className="py-3 pr-4">
+                      <td className="py-3 pr-2 text-muted-foreground text-xs">{b.paid_at ? new Date(b.paid_at).toLocaleDateString() : "—"}</td>
+                      <td className="py-3 pr-2">
                         {isFirstInGroup ? (
                           <a href={`/api/invoice?periodMonth=${b.period_month}&periodYear=${b.period_year}&paymentResponsibleId=${payerId}`} target="_blank" rel="noreferrer" className="text-xs text-blue-600 hover:underline flex items-center gap-1 w-fit"><Download className="size-3" /> PDF</a>
                         ) : "—"}
                       </td>
-                      <td className="py-3">
+                      <td className="py-3 pr-2">
                         {isFirstInGroup ? (
                           <div className="flex flex-col gap-1">
                             {anyReceipt && (
