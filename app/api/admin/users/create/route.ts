@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-/** Admin creates owner/tenant - NO auto site. Admin assigns site manually in Users tab. */
+/** Admin creates a resident user (owner/tenant on units is set when assigning a unit). */
 export async function POST(request: Request) {
   try {
     const sb = await createClient();
@@ -21,8 +21,8 @@ export async function POST(request: Request) {
     if (!email || !password || !name || !surname || !role) {
       return NextResponse.json({ success: false, error: "email, password, name, surname, role required" }, { status: 400 });
     }
-    if (role !== "owner" && role !== "tenant") {
-      return NextResponse.json({ success: false, error: "role must be owner or tenant" }, { status: 400 });
+    if (role !== "resident" && role !== "owner" && role !== "tenant") {
+      return NextResponse.json({ success: false, error: "role must be resident" }, { status: 400 });
     }
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({

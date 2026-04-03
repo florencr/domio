@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
+import { pollApiHeaders } from "@/lib/polls/poll-api-auth-headers";
 
 type PollListItem = {
   id: string;
@@ -42,7 +43,11 @@ export function ResidentPollsSection() {
 
   const loadList = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/polls/resident", { cache: "no-store" });
+    const res = await fetch("/api/polls/resident", {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     setPolls(Array.isArray(j.polls) ? j.polls : []);
     setLoading(false);
@@ -53,7 +58,11 @@ export function ResidentPollsSection() {
   }, [loadList]);
 
   async function fetchDetail(pollId: string) {
-    const res = await fetch(`/api/polls/resident/${pollId}`, { cache: "no-store" });
+    const res = await fetch(`/api/polls/resident/${pollId}`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       setMsg(j.error || "Error");
@@ -105,7 +114,8 @@ export function ResidentPollsSection() {
     setMsg("");
     const res = await fetch(`/api/polls/resident/${pollId}/vote`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: await pollApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ answers }),
     });
     const j = await res.json().catch(() => ({}));

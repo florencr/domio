@@ -17,19 +17,20 @@ export default function AdminUsersPage() {
   const [userRoleFilter, setUserRoleFilter] = useState<string>("all");
   const [userSiteFilter, setUserSiteFilter] = useState<string>("all");
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [userForm, setUserForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", role: "owner", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+  const [userForm, setUserForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", surname: "", email: "", phone: "", password: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
   const [assignManagerSite, setAssignManagerSite] = useState<UserRow | null>(null);
   const [assignManagerSiteId, setAssignManagerSiteId] = useState("");
   const [assignUnitUser, setAssignUnitUser] = useState<UserRow | null>(null);
   const [assignUnitId, setAssignUnitId] = useState("");
+  const [assignUnitAsRole, setAssignUnitAsRole] = useState<"owner" | "tenant">("owner");
   const [unitsList, setUnitsList] = useState<{ id: string; unit_name: string; building_name: string; site_id: string | null }[]>([]);
 
   const allRows: UserRow[] = [];
   usersBySite.forEach(({ site_id, site_name, manager, owners, tenants }) => {
     if (manager) allRows.push({ id: manager.id, name: manager.name, surname: manager.surname, email: manager.email, phone: manager.phone ?? null, role: "manager", site_id, site_name, units: [] });
-    owners.forEach(u => allRows.push({ id: u.id, name: u.name, surname: u.surname, email: u.email, phone: u.phone ?? null, role: "owner", site_id, site_name, units: u.units }));
+    owners.forEach(u => allRows.push({ id: u.id, name: u.name, surname: u.surname, email: u.email, phone: u.phone ?? null, role: u.role, site_id, site_name, units: u.units }));
     tenants.forEach(u => allRows.push({ id: u.id, name: u.name, surname: u.surname, email: u.email, phone: u.phone ?? null, role: u.role, site_id, site_name, units: u.units }));
   });
   const managersWithoutSite = managers.filter(m => !sites.some(s => s.manager_id === m.id));
@@ -71,7 +72,7 @@ export default function AdminUsersPage() {
       const json = await res.json();
       if (res.ok && json.success) {
         setMsg({ text: "Manager created.", ok: true });
-        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "owner", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
         setShowCreateUser(false);
         load();
       } else {
@@ -86,7 +87,7 @@ export default function AdminUsersPage() {
       const json = await res.json();
       if (res.ok && json.success) {
         setMsg({ text: "User created. Assign unit below.", ok: true });
-        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "owner", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
         setShowCreateUser(false);
         load();
       } else {
@@ -170,7 +171,7 @@ export default function AdminUsersPage() {
     const res = await fetch("/api/admin/assign-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: assignUnitUser.id, unitId: assignUnitId, role: assignUnitUser.role }),
+      body: JSON.stringify({ userId: assignUnitUser.id, unitId: assignUnitId, role: assignUnitAsRole }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
@@ -202,7 +203,7 @@ export default function AdminUsersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Users</CardTitle>
-          <p className="text-sm text-muted-foreground">All users (managers, owners, tenants). Edit profile, assign site (managers) or unit (owners/tenants).</p>
+          <p className="text-sm text-muted-foreground">All users (managers, residents). Edit profile, assign site (managers) or unit (as owner or tenant of that unit).</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -224,7 +225,7 @@ export default function AdminUsersPage() {
                     <div><Label className="text-xs">Role</Label>
                       <Select value={userForm.role} onValueChange={v => setUserForm({ ...userForm, role: v })}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="manager">Manager</SelectItem><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem></SelectContent>
+                        <SelectContent><SelectItem value="manager">Manager</SelectItem><SelectItem value="resident">Resident</SelectItem></SelectContent>
                       </Select>
                     </div>
                   </div>
@@ -308,8 +309,18 @@ export default function AdminUsersPage() {
             {assignUnitUser && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => e.target === e.currentTarget && setAssignUnitUser(null)}>
                 <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4 w-full" onClick={e => e.stopPropagation()}>
-                  <p className="font-semibold mb-1">Assign unit to {assignUnitUser.role}: {assignUnitUser.name} {assignUnitUser.surname}</p>
+                  <p className="font-semibold mb-1">Assign unit — {assignUnitUser.name} {assignUnitUser.surname} <span className="font-normal text-muted-foreground">(profile: {assignUnitUser.role})</span></p>
                   <div className="flex flex-wrap gap-3 items-end mt-4">
+                    <div className="flex-1 min-w-[160px]">
+                      <Label className="text-xs">On unit as</Label>
+                      <Select value={assignUnitAsRole} onValueChange={v => setAssignUnitAsRole(v as "owner" | "tenant")}>
+                        <SelectTrigger className="w-full mt-1"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="owner">Unit owner</SelectItem>
+                          <SelectItem value="tenant">Unit tenant</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
                     <div className="flex-1 min-w-[200px]">
                       <Label className="text-xs">Unit</Label>
                       <Select value={assignUnitId || "__"} onValueChange={v => setAssignUnitId(v === "__" ? "" : v)}>
@@ -339,8 +350,9 @@ export default function AdminUsersPage() {
                   <SelectItem value="all">All roles</SelectItem>
                   <SelectItem value="admin">Admin</SelectItem>
                   <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="owner">Owner</SelectItem>
-                  <SelectItem value="tenant">Tenant</SelectItem>
+                  <SelectItem value="resident">Resident</SelectItem>
+                  <SelectItem value="owner">Owner (legacy)</SelectItem>
+                  <SelectItem value="tenant">Tenant (legacy)</SelectItem>
                 </SelectContent>
               </Select>
               <Select value={userSiteFilter} onValueChange={setUserSiteFilter}>
@@ -379,10 +391,10 @@ export default function AdminUsersPage() {
                           {r.role === "manager" && (
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignManagerSite(r); setAssignManagerSiteId(r.site_id !== "__unassigned__" ? r.site_id : ""); }} title="Assign site"><Building2 className="size-3.5 mr-0.5" />Assign site</Button>
                           )}
-                          {(r.role === "owner" || r.role === "tenant") && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignUnitUser(r); setAssignUnitId(""); }} title="Assign unit"><Home className="size-3.5 mr-0.5" />Assign unit</Button>
+                          {(r.role === "resident" || r.role === "owner" || r.role === "tenant") && (
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignUnitUser(r); setAssignUnitId(""); setAssignUnitAsRole("owner"); }} title="Assign unit"><Home className="size-3.5 mr-0.5" />Assign unit</Button>
                           )}
-                          {(r.role === "manager" || r.role === "owner" || r.role === "tenant") && (
+                          {(r.role === "manager" || r.role === "resident" || r.role === "owner" || r.role === "tenant") && (
                             <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => deleteUnassignedUser(r.id)}>Delete</Button>
                           )}
                         </div>

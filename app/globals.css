@@ -133,15 +133,15 @@
     touch-action: manipulation;
   }
 
-  /* 2. Prevent accidental text selection except in form fields */
-  * {
+  /* 2. Prevent accidental text selection except in form fields (production, or dev when toggled on) */
+  html.domio-select-restricted * {
     -webkit-user-select: none;
     user-select: none;
   }
-  input,
-  textarea,
-  [contenteditable="true"],
-  a[href^="tel:"] {
+  html.domio-select-restricted input,
+  html.domio-select-restricted textarea,
+  html.domio-select-restricted [contenteditable="true"],
+  html.domio-select-restricted a[href^="tel:"] {
     -webkit-user-select: text;
     user-select: text;
   }

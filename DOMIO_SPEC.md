@@ -1,11 +1,15 @@
 # Domio – Implementation status & next steps
 
+> **Current product documentation** (roles, resident vs unit-level owner/tenant, polls, APIs, folders) lives in **`DOMIO_APP_DOCUMENTATION.md`** at the repo root. This file is a short historical checklist.
+
 ## Done
 
-- **Stack:** Next.js (App Router), Tailwind, Shadcn/UI, Supabase client + SSR helpers.
-- **Env:** Copy `.env.local.example` to `.env.local` and set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-- **DB schema:** `supabase/migrations/001_initial_schema.sql` – profiles (Manager/Owner/Tenant), buildings, units, unit_owners, unit_tenant_assignments, services, expenses, bills, bill_lines, payments. Run in Supabase SQL Editor (or `supabase db push` if using CLI).
-- **Types:** `types/database.ts` – all entities and enums.
+- **Stack:** Next.js (App Router), Tailwind, Shadcn/UI, Supabase client + SSR helpers, `proxy.ts` session refresh (Next 16).
+- **Env:** `.env.local` — `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, and **`SUPABASE_SERVICE_ROLE_KEY`** for server APIs (billing, polls, admin actions, etc.).
+- **DB schema:** Multiple migrations under `supabase/migrations/` — includes **`unit_memberships`**, **`polls`** / questions / options / votes (**`070_polls.sql`**), plus original buildings/units/bills/etc.
+- **Types:** `types/database.ts` – entities and enums (includes `resident` in `AppRole`).
+- **Residents & roles:** Dashboard **`/dashboard/resident`**; **owner/tenant** modeled per **unit**; admin creates **manager** / **resident** and assigns unit roles via APIs.
+- **Community polls:** Manager create/publish/close/results; resident list/vote; see main doc §8.
 
 ## Next steps (in order)
 

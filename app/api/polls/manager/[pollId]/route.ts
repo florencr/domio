@@ -1,33 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
-
-function adminClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
-}
-
-async function requireManagerSite() {
-  const sb = await createClient();
-  const { data: { user } } = await sb.auth.getUser();
-  if (!user) return { ok: false as const, status: 401, error: "Unauthorized" };
-  const { data: profile } = await sb.from("profiles").select("role").eq("id", user.id).single();
-  if ((profile as { role?: string } | null)?.role !== "manager") {
-    return { ok: false as const, status: 403, error: "Managers only" };
-  }
-  const admin = adminClient();
-  const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).maybeSingle();
-  const siteId = (site as { id: string } | null)?.id ?? null;
-  if (!siteId) return { ok: false as const, status: 400, error: "No site assigned" };
-  return { ok: true as const, admin, user, siteId };
-}
+import { requireManagerSite } from "@/lib/polls/require-manager-site";
 
 type QIn = { prompt: string; help_text?: string | null; kind: "single_select" | "multi_select"; options: { label: string; explanation?: string | null }[] };
 
-async function replaceQuestions(admin: ReturnType<typeof adminClient>, pollId: string, questions: QIn[]) {
+async function replaceQuestions(admin: SupabaseClient, pollId: string, questions: QIn[]) {
   await admin.from("poll_questions").delete().eq("poll_id", pollId);
   for (let qi = 0; qi < questions.length; qi++) {
     const q = questions[qi];

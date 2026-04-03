@@ -7,12 +7,13 @@
 ## 1. Overview
 
 **Domio** is a condo (HOA) management app with role-based dashboards:
-- **Admin** – sites and managers
-- **Manager** – billing, expenses, config per site
-- **Owner** – own units, bills, ledger
-- **Tenant** – own bills, ledger
+- **Admin** – sites, managers, residents; user creation and unit assignment
+- **Manager** – billing, expenses, config per site, **community polls / voting**
+- **Resident** – single app experience for people who live in the community; **owner vs tenant is per unit**, not a separate login “role”
 
 Includes mobile shells (iOS/Android) via Capacitor that load the deployed web app.
+
+**Important:** A person’s **account role** in `profiles` is typically **`resident`** (or `manager` / `admin`). Whether they act as **owner** or **tenant** for a given **unit** is stored on **unit links** (`unit_memberships`, and legacy `unit_owners` / `unit_tenant_assignments`). The same resident can be **owner of one unit** (e.g. apartment) and **tenant of another** (e.g. parking).
 
 ---
 
@@ -56,94 +57,105 @@ Includes mobile shells (iOS/Android) via Capacitor that load the deployed web ap
 - **Auth**: Supabase Auth; role stored in `profiles`.
 - **Data**: PostgreSQL with RLS and role-based access.
 - **Mobile**: Capacitor app points to web URL (`CAPACITOR_APP_URL`).
+- **Session refresh:** `proxy.ts` (Next.js 16) refreshes the Supabase session cookie on matched routes (`/dashboard`, `/api`, `/auth`, `/login`, `/signup`).
 
 ---
 
-## 4. Folder Structure
+## 4. User management & roles
+
+### Account roles (`profiles.role`)
+
+| Role | Meaning |
+|------|--------|
+| `admin` | Cross-site administration |
+| `manager` | Runs one site (linked via `sites.manager_id`) |
+| `resident` | Default for residents created in the app; uses the **resident** dashboard |
+
+Admin and manager creation flows still create those roles directly. **Admin “create user”** typically offers **Manager** or **Resident**; assigning someone to a unit uses an **assignment role** of **owner** or **tenant** on that unit only (see below). The profile usually stays **`resident`** so one person can hold **multiple unit relationships** with different hats.
+
+### Unit-level owner / tenant (not the same as `profiles.role`)
+
+| Mechanism | Purpose |
+|-----------|--------|
+| `unit_memberships` | Preferred model: `user_id`, `unit_id`, `role` (`owner` \| `tenant`), `status`, `is_payment_responsible` (for tenants) |
+| `unit_owners` | Legacy one-owner-per-unit row; kept in sync when managers/admins assign |
+| `unit_tenant_assignments` | Legacy tenant + `is_payment_responsible`; kept in sync with `unit_memberships` |
+
+APIs such as `/api/manager/assign-unit`, `/api/admin/assign-user`, and `/api/owner/tenant-assignment` update these tables (and memberships). Billing and dashboards resolve access from **memberships + legacy tables**, not from forcing `profiles.role` to `owner` or `tenant`.
+
+### Routes
+
+- **`/dashboard/resident`** – main experience for residents (billing, units, notifications, **polls**).
+- **`/dashboard/owner`** and **`/dashboard/tenant`** – redirected to resident paths (see `next.config.ts` / resident billing & preferences).
+
+---
+
+## 5. Folder Structure
 
 ```
 domio-app/
 ├── app/
 │   ├── (auth)/                 # Auth route group
-│   │   ├── layout.tsx
 │   │   ├── login/page.tsx
 │   │   └── signup/page.tsx
 │   ├── api/                    # REST API routes
-│   │   ├── admin/              # Admin CRUD, maintenance, audit-log
-│   │   ├── auth/signout/
-│   │   ├── bills/
-│   │   ├── expenses/
-│   │   ├── invoice/             # PDF generation
-│   │   ├── notifications/       # get, read, send, sent
-│   │   ├── receipt/             # Serve receipt files
-│   │   ├── receipt-record/
-│   │   ├── owner/data/
-│   │   ├── tenant/data/
-│   │   └── users/              # create, update
-│   ├── actions/                # Server actions
-│   │   ├── auth.ts
-│   │   ├── billing.ts
-│   │   ├── config.ts
-│   │   └── users.ts
+│   │   ├── admin/              # sites, managers, users, assign-user, audit, …
+│   │   ├── manager/           # buildings, units, bills, expenses, polls, …
+│   │   ├── polls/              # manager + resident poll APIs
+│   │   ├── resident/data/
+│   │   ├── memberships/
+│   │   ├── notifications/
+│   │   ├── owner/              # e.g. tenant-assignment (owner of unit)
+│   │   └── …
+│   ├── auth/callback/          # OAuth / email confirm
 │   ├── dashboard/
-│   │   ├── page.tsx             # Redirects via DashboardRouter
 │   │   ├── dashboard-router.tsx
-│   │   ├── owner/page.tsx
-│   │   ├── manager/page.tsx
-│   │   ├── tenant/page.tsx
+│   │   ├── manager/            # layout + billing, config, …
+│   │   ├── resident/           # billing, units, notifications (polls), …
 │   │   └── admin/
-│   │       ├── page.tsx
-│   │       └── managers/[id]/page.tsx
 │   ├── layout.tsx
-│   ├── page.tsx                 # Home
-│   └── not-found.tsx
-├── components/
-│   ├── ui/                      # shadcn-style components
-│   ├── NotificationBell.tsx
-│   ├── DomioLogo.tsx
+│   └── page.tsx
 ├── lib/
-│   ├── supabase/client.ts       # Browser client
-│   ├── supabase/server.ts       # Server client
-│   └── utils.ts
-├── public/
-├── supabase/migrations/          # SQL migrations (40 files)
-├── android/                     # Capacitor Android project
-├── ios/                         # Capacitor iOS project
+│   ├── community-polls.ts      # Eligibility, formal vs informal voting rules
+│   ├── poll-publish-notify.ts # Publish poll + in-app + push
+│   ├── dashboard-redirect.ts
+│   ├── unit-memberships.ts    # Sync unit_memberships with legacy tables
+│   └── supabase/              # client, server, service-role helper
+├── supabase/migrations/        # includes unit_memberships, polls (e.g. 068+, 070)
+├── proxy.ts                    # Supabase session refresh (Next 16)
 ├── capacitor.config.ts
-├── middleware.ts
 └── package.json
 ```
 
 ---
 
-## 5. Routes & Pages
+## 6. Routes & Pages
 
 | Route | Purpose |
 |-------|---------|
 | `/` | Home – Sign in / Sign up or Dashboard link |
 | `/login` | Sign in |
-| `/signup` | Sign up (creates owner by default) |
-| `/dashboard` | DashboardRouter → redirect by role |
+| `/signup` | Sign up (profile role **resident** by default; see auth callback) |
+| `/dashboard` | `DashboardRouter` → redirect by `profiles.role` + session |
 | `/dashboard/admin` | Admin dashboard |
-| `/dashboard/admin/managers/[id]` | Edit manager |
 | `/dashboard/manager` | Manager dashboard |
-| `/dashboard/owner` | Owner dashboard |
-| `/dashboard/tenant` | Tenant dashboard |
+| `/dashboard/resident` | Resident dashboard (units, billing, notifications, polls) |
+| `/dashboard/owner/*`, `/dashboard/tenant/*` | **Redirects** to resident routes (legacy URLs) |
 
 **Auth flow:**
-- `/dashboard` loads `DashboardRouter`.
-- Reads Supabase user and `profiles.role`.
-- Redirects to `/dashboard/admin`, `/manager`, `/owner`, or `/tenant`.
+- `/dashboard` loads `DashboardRouter` (browser Supabase session + `profiles`, with API fallback as needed).
+- Redirects to `/dashboard/admin`, `/dashboard/manager`, or **`/dashboard/resident`** for residents.
 - If not logged in → `/login`.
 
 ---
 
-## 6. Features by Role
+## 7. Features by Role
 
 ### Admin
 
 - **Sites**: List, create, update; assign managers.
 - **Managers**: Create (with optional site); list; edit via `/admin/managers/[id]`.
+- **Users**: Create **manager** or **resident**; list by site; assign users to units as **unit owner** or **unit tenant** (assignment API); edit profiles.
 - **Buildings**: Create, update, delete.
 - **Maintenance**: Toggle delete locks (bills/expenses); clear site data (keeps user accounts).
 - **Audit Log**: View all changes across sites (entity type filter, who/what/when).
@@ -163,32 +175,40 @@ domio-app/
 - **Ledger**: Income vs expenses, running balance.
 - **Documents**: Attach contracts, invoices, maintenance docs to buildings or expenses. Categories: contract, maintenance, invoice, other.
 - **Notifications**: Send to owners, tenants, by unit type; filter by unpaid.
+- **Polls & formal resolutions** (Config → Notifications area): Create drafts (questions, options, category scope: apartment / parking / garden / global); optional document attachment; **informal survey** (1 user = 1 vote) vs **formal resolution** (1 unit = 1 vote, configurable **approval threshold %** on a chosen question/option). Publish (with optional notify eligible residents in-app + push). View **results** (readable summary), **close** voting. APIs: `/api/polls/manager/...`.
 - **Audit Log**: View changes for their site only (entity type filter).
 - **Mobile**: Bottom tabs (Billing, Expenses, Payments, Ledger); config via cog icon.
 
-### Owner
+### Resident (replaces separate Owner / Tenant apps in the UI)
 
-- **My Units**: Units owned, building, type, m², assign/remove tenants. Sortable (unit, building, type, size, tenant).
-- **Billing**:
-  - Bills grouped by period + payer.
-  - Download PDF invoice, upload slip (image/PDF).
-  - Filters: Period, unit type, unit, payment status. Sortable columns.
-  - Mobile: Filter icon (top right) toggles collapsible filters.
-- **Ledger**: Income vs expenses, running balance. Filters: Period, type, status. Sortable columns.
-- **Summary Cards**: Collected, Outstanding, Monthly expenses, Net fund.
-- **Notifications**: Bell with unread count, mark read, “See all”.
-- **Mobile**: Bottom tabs (My Units, Billing, Ledger); notifications via bell.
+Experience is driven by **unit memberships**: owners see owned units and can manage tenants where applicable; tenants see assigned units and bills where they are payment responsible.
 
-### Tenant
-
-- **My Units**: Read-only units assigned.
-- **Billing**: Own bills (payment responsible); download PDF, upload slips.
-- **Ledger**: View transactions.
-- **Notifications**: Same as owner.
+- **Units**: Units linked via owner/tenant assignments; owner flows can assign or release tenants (subject to APIs).
+- **Billing**: Bills per unit / payer; PDF invoice; upload slip; filters and sorting as before.
+- **Ledger**: Income vs expenses, running balance where exposed.
+- **Notifications**: Bell, unread, “See all”; includes **poll notifications** with deep link payload.
+- **Polls & voting** (Notifications area): List published/closed polls for sites the user belongs to; open poll, vote (single/multi select per question); formal polls vote **per eligible unit**; informal **per user**. API: `/api/polls/resident/...`.
+- **Mobile**: Bottom tabs and patterns aligned with previous owner/tenant mobile layout (billing, units, etc.).
 
 ---
 
-## 7. Database Schema
+## 8. Community polls & voting (reference)
+
+| Concept | Behavior |
+|--------|----------|
+| **Scope** | Poll targets units by **category** (`apartment`, `parking`, `garden`, or **global** for whole site). |
+| **Informal survey** | Each **user** has at most one ballot per question. |
+| **Formal resolution** | Each **unit** in scope has at most one ballot per question; **threshold %** (default 70%) compares approving **units** to **registered units in scope**. |
+| **Lifecycle** | `draft` → `published` (with `published_at`) → `closed`. Only drafts are editable. |
+| **Notifications** | On publish, eligible users get in-app notification rows (+ FCM push if configured). |
+| **Schema** | `polls`, `poll_questions`, `poll_options`, `poll_question_votes` — see `supabase/migrations/070_polls.sql`. |
+| **Logic** | `lib/community-polls.ts` (eligibility, counts); `lib/poll-publish-notify.ts` (publish + notify). |
+
+Server routes use the **Supabase service role** where needed; ensure `SUPABASE_SERVICE_ROLE_KEY` is set in every environment.
+
+---
+
+## 9. Database Schema
 
 ### Main Tables
 
@@ -198,8 +218,13 @@ domio-app/
 | `sites` | id, name, address, manager_id, vat_account |
 | `buildings` | id, name, site_id |
 | `units` | id, building_id, unit_name, type, size_m2, block, entrance, floor |
-| `unit_owners` | unit_id, owner_id |
-| `unit_tenant_assignments` | unit_id, tenant_id, is_payment_responsible |
+| `unit_memberships` | unit_id, user_id, role (`owner` \| `tenant`), status, is_payment_responsible; canonical link for dashboards/polls (migrations 068+) |
+| `unit_owners` | unit_id, owner_id (legacy; synced from assignments) |
+| `unit_tenant_assignments` | unit_id, tenant_id, is_payment_responsible (legacy; synced) |
+| `polls` | site_id, title, classification, category_scope, status, closes_at, threshold fields, attachment metadata (`070_polls.sql`) |
+| `poll_questions` | poll_id, prompt, kind (single/multi select), sort_order |
+| `poll_options` | question_id, label, sort_order |
+| `poll_question_votes` | poll_id, question_id, voter_user_id, unit_id (formal), option_ids[] |
 | `unit_types` | Config (name) |
 | `vendors` | Config (name) |
 | `service_categories` | Config (name) |
@@ -216,7 +241,8 @@ domio-app/
 
 ### Enums
 
-- `app_role`: manager, owner, tenant, admin
+- `app_role`: **admin**, **manager**, **resident** (primary resident accounts); **owner** / **tenant** may still appear in older data but product logic prefers **unit-level** owner/tenant via memberships (see §4).
+- Poll enums: `poll_classification`, `poll_category_scope`, `poll_status`, `poll_question_kind` (see migration `070_polls.sql`).
 - `pricing_model`: per_m2, fixed_per_unit
 - `service_frequency`: recurrent, one_time, ad_hoc
 - `expense_frequency`: recurrent, ad_hoc
@@ -255,7 +281,7 @@ domio-app/
 
 ---
 
-## 8. API Routes
+## 10. API Routes
 
 | Endpoint | Methods | Purpose |
 |----------|---------|---------|
@@ -270,8 +296,22 @@ domio-app/
 | `/api/notifications/register-device` | POST | Register push device token (mobile) |
 | `/api/notifications/send` | POST | Send notification (manager) |
 | `/api/notifications/sent` | GET | List sent notifications |
-| `/api/owner/data` | GET | Owner data |
-| `/api/tenant/data` | GET | Tenant data |
+| `/api/resident/data` | GET | Aggregated resident dashboard data (memberships + legacy) |
+| `/api/owner/data` | GET | Legacy/compatibility owner-shaped data where still used |
+| `/api/tenant/data` | GET | Legacy/compatibility tenant-shaped data where still used |
+| `/api/memberships` | GET | Active `unit_memberships` for the signed-in user (+ unit names) |
+| `/api/polls/manager` | GET, POST | List polls; create draft (+ optional publish & notify) |
+| `/api/polls/manager/[pollId]` | GET, PATCH, DELETE | Draft detail / update / delete |
+| `/api/polls/manager/[pollId]/publish` | POST | Publish formal/informal with threshold options |
+| `/api/polls/manager/[pollId]/close` | POST | Close poll |
+| `/api/polls/manager/[pollId]/results` | GET | Aggregated results for managers |
+| `/api/polls/manager/[pollId]/attachment` | POST | Upload draft attachment |
+| `/api/polls/resident` | GET | List polls visible to current resident |
+| `/api/polls/resident/[pollId]` | GET | Poll detail + signed attachment URL |
+| `/api/polls/resident/[pollId]/vote` | POST | Submit votes |
+| `/api/admin/users/create` | POST | Create manager or resident (see admin UI) |
+| `/api/admin/assign-user` | POST | Assign user to unit as owner or tenant |
+| `/api/admin/users-by-site` | GET | Users listing / grouping for admin |
 | `/api/admin/sites` | GET, POST | List/create sites |
 | `/api/admin/sites/[id]` | PATCH | Update site |
 | `/api/admin/buildings` | POST | Create building |
@@ -287,20 +327,22 @@ domio-app/
 
 ---
 
-## 9. Components
+## 11. Components
 
 | Component | Purpose |
 |-----------|---------|
 | `DomioLogo` | Logo component |
 | `NotificationBell` | Bell icon, unread count, dropdown (first 4 + “See all”), mark read. Manager: “Send notification” entry. |
-| `DashboardRouter` | Redirects to role dashboard |
+| `DashboardRouter` | Redirects to role dashboard (admin / manager / resident) |
+| `ManagerPollsPanel` | Manager: create/edit/publish polls, results, close (notifications config page) |
+| `ResidentPollsSection` | Resident: list polls, vote, view results state |
 | `SortableTh` | Sortable table header (column, sortCol, sortDir, onSort) |
 | `sortBy()` | Utility from sortable-th for client-side sort |
 | UI (button, card, input, label, select, tabs, table, dropdown-menu, hover-card) | Shared UI primitives |
 
 ---
 
-## 10. Integrations
+## 12. Integrations
 
 ### Supabase
 
@@ -308,7 +350,7 @@ domio-app/
 - DB: PostgreSQL, RLS by role and site.
 - Storage: `payment-slips`, `documents` buckets.
 - Client: `createClient` from `@/lib/supabase/client` (browser).
-- Server: `createClient` from `@/lib/supabase/server` / `@supabase/ssr`.
+- Server: `createClient` from `@/lib/supabase/server` (`@supabase/ssr`); service role via `@/lib/supabase/service-role` where needed (`SUPABASE_SERVICE_ROLE_KEY`).
 
 ### Capacitor
 
@@ -324,16 +366,14 @@ domio-app/
 
 ---
 
-## 11. Mobile Layout
+## 13. Mobile Layout
 
-
-- **Owner**: Bottom tabs (My Units, Billing, Ledger); Notifications via bell; filter icon toggles collapsible filters on Billing and Ledger.
+- **Resident**: Bottom tabs (e.g. units, billing, ledger, payments as routed); notifications via bell; collapsible filters where used; polls under notifications flow.
 - **Manager**: Bottom tabs (Billing, Expenses, Payments, Ledger); Config via cog; filters collapsible on mobile.
-- **Tenant**: Same pattern as owner where applicable.
 
 ---
 
-## 12. Audit Logs, Document Management & Lock Rules
+## 14. Audit Logs, Document Management & Lock Rules
 
 ### Audit Logs
 
@@ -356,16 +396,16 @@ domio-app/
 
 ---
 
-## 13. Key Behaviors
+## 15. Key Behaviors
 
 - **PDF invoice**: Generated per (period, paymentResponsibleId) for owner, or per bill.
 - **Receipt upload**: Owner/tenant uploads slip; stored in Supabase Storage; path recorded.
-- **Unit assignment**: Manager assigns owners to units; owner/manager assigns tenants; one tenant per unit can be payment responsible.
+- **Unit assignment**: Manager (or admin) assigns **unit owner** and **unit tenant**; assignments maintain `unit_memberships` and legacy tables. **Payment responsibility** is per tenant assignment. One person can be owner on one unit and tenant on another while staying a **resident** at account level.
 - **Bill grouping**: Bills grouped by (period, payer); one PDF and one slip per group.
 
 ---
 
-## 14. Push Notifications
+## 16. Push Notifications
 
 Push notifications use Capacitor's `@capacitor/push-notifications` plugin and Firebase Cloud Messaging (FCM).
 

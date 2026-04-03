@@ -25,7 +25,7 @@ export function OAuthButtons() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${origin}/auth/callback?next=/`,
+        redirectTo: `${origin}/auth/callback?next=/dashboard`,
       },
     });
     setLoading(null);

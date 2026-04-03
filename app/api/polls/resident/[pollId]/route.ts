@@ -1,14 +1,10 @@
-import { createClient } from "@/lib/supabase/server";
-import { createClient as createAdminClient } from "@supabase/supabase-js";
+import { createServiceRoleClient } from "@/lib/supabase/service-role";
 import { NextResponse } from "next/server";
 import { pollIsOpen, userCanViewPoll, userCanVotePoll } from "@/lib/community-polls";
+import { getSessionUserInRoute } from "@/lib/supabase/get-session-user-in-route";
 
 function adminClient() {
-  return createAdminClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { autoRefreshToken: false, persistSession: false } }
-  );
+  return createServiceRoleClient();
 }
 
 export async function GET(
@@ -16,8 +12,7 @@ export async function GET(
   context: { params: Promise<{ pollId: string }> }
 ) {
   try {
-    const sb = await createClient();
-    const { data: { user } } = await sb.auth.getUser();
+    const user = await getSessionUserInRoute();
     if (!user) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
     const { pollId } = await context.params;

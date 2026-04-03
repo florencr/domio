@@ -112,9 +112,9 @@ export async function GET() {
         if (p) tenantList.push({ ...p, units: unitNames });
       });
       (profiles ?? []).forEach((p: ProfileRow) => {
-        if (p.role === "owner" && !ownerUnits.has(p.id) && userToSiteAssignment.get(p.id) === site.id)
+        if ((p.role === "owner" || p.role === "resident") && !ownerUnits.has(p.id) && !tenantUnits.has(p.id) && userToSiteAssignment.get(p.id) === site.id)
           ownerList.push({ ...p, units: [] });
-        if (p.role === "tenant" && !tenantUnits.has(p.id) && userToSiteAssignment.get(p.id) === site.id)
+        if (p.role === "tenant" && !tenantUnits.has(p.id) && !ownerUnits.has(p.id) && userToSiteAssignment.get(p.id) === site.id)
           tenantList.push({ ...p, units: [] });
       });
 
@@ -132,8 +132,8 @@ export async function GET() {
     const adminUsers: UserWithUnits[] = [];
     (profiles ?? []).forEach((p: ProfileRow) => {
       if (p.role === "admin") adminUsers.push({ ...p, units: [] });
-      if (p.role === "owner" && !assignedOwnerIds.has(p.id) && !userToSiteAssignment.has(p.id)) unassignedOwners.push({ ...p, units: [] });
-      if (p.role === "tenant" && !assignedTenantIds.has(p.id) && !userToSiteAssignment.has(p.id)) unassignedTenants.push({ ...p, units: [] });
+      if ((p.role === "owner" || p.role === "resident") && !assignedOwnerIds.has(p.id) && !assignedTenantIds.has(p.id) && !userToSiteAssignment.has(p.id)) unassignedOwners.push({ ...p, units: [] });
+      if (p.role === "tenant" && !assignedTenantIds.has(p.id) && !assignedOwnerIds.has(p.id) && !userToSiteAssignment.has(p.id)) unassignedTenants.push({ ...p, units: [] });
     });
     if (adminUsers.length) {
       result.push({

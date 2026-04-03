@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -8,7 +8,8 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
-import { ChevronDown, ChevronUp } from "lucide-react";
+import { pollApiHeaders } from "@/lib/polls/poll-api-auth-headers";
+import { BarChart3, ChevronDown, ChevronUp, Lock, Pencil, Rocket, Trash2 } from "lucide-react";
 
 type PollRow = {
   id: string;
@@ -30,6 +31,42 @@ const emptyQ = (): QDraft => ({
   options: [{ label: "", explanation: "" }, { label: "", explanation: "" }],
 });
 
+type PollResultsOption = { optionId: string; label: string; votes: number };
+type PollResultsQuestion = {
+  questionId: string;
+  prompt: string;
+  kind: string;
+  options: PollResultsOption[];
+  participationCount: number;
+};
+
+type PollManagerResults = {
+  pollId: string;
+  classification: string;
+  category_scope: string;
+  totalRegisteredUnits: number;
+  open: boolean;
+  thresholdPercent: number;
+  approvalUnitVotes: number;
+  resolutionPassed: boolean | null;
+  questions: PollResultsQuestion[];
+};
+
+function isPollManagerResults(j: unknown): j is PollManagerResults {
+  if (typeof j !== "object" || j === null) return false;
+  const o = j as Record<string, unknown>;
+  return typeof o.pollId === "string" && Array.isArray(o.questions);
+}
+
+function scrollSectionIntoView(el: HTMLElement | null) {
+  if (!el) return;
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      el.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+  });
+}
+
 export function ManagerPollsPanel() {
   const { locale } = useLocale();
   const [polls, setPolls] = useState<PollRow[]>([]);
@@ -45,7 +82,7 @@ export function ManagerPollsPanel() {
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [resultsId, setResultsId] = useState<string | null>(null);
-  const [resultsJson, setResultsJson] = useState<string>("");
+  const [pollResults, setPollResults] = useState<PollManagerResults | null>(null);
   const [publishId, setPublishId] = useState<string | null>(null);
   const [thresholdQid, setThresholdQid] = useState("");
   const [approvalOid, setApprovalOid] = useState("");
@@ -54,9 +91,29 @@ export function ManagerPollsPanel() {
   const [createThQIdx, setCreateThQIdx] = useState(0);
   const [createThOIdx, setCreateThOIdx] = useState(0);
 
+  const pollFormSectionRef = useRef<HTMLDivElement>(null);
+  const publishSectionRef = useRef<HTMLDivElement>(null);
+  const resultsSectionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (showForm) scrollSectionIntoView(pollFormSectionRef.current);
+  }, [showForm]);
+
+  useEffect(() => {
+    if (publishId) scrollSectionIntoView(publishSectionRef.current);
+  }, [publishId]);
+
+  useEffect(() => {
+    if (pollResults && resultsId) scrollSectionIntoView(resultsSectionRef.current);
+  }, [pollResults, resultsId]);
+
   const loadPolls = useCallback(async () => {
     setLoading(true);
-    const res = await fetch("/api/polls/manager", { cache: "no-store" });
+    const res = await fetch("/api/polls/manager", {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     setPolls(Array.isArray(j.polls) ? j.polls : []);
     setLoading(false);
@@ -81,7 +138,11 @@ export function ManagerPollsPanel() {
   }
 
   async function loadDraftForEdit(pollId: string) {
-    const res = await fetch(`/api/polls/manager/${pollId}`, { cache: "no-store" });
+    const res = await fetch(`/api/polls/manager/${pollId}`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       setMsg({ text: j.error || "Failed", ok: false });
@@ -171,7 +232,8 @@ export function ManagerPollsPanel() {
     const url = editingId ? `/api/polls/manager/${editingId}` : "/api/polls/manager";
     const res = await fetch(url, {
       method: editingId ? "PATCH" : "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: await pollApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify(body),
     });
     const j = await res.json().catch(() => ({}));
@@ -197,7 +259,12 @@ export function ManagerPollsPanel() {
     if (!pollId || !file) return;
     const fd = new FormData();
     fd.append("file", file);
-    const res = await fetch(`/api/polls/manager/${pollId}/attachment`, { method: "POST", body: fd });
+    const res = await fetch(`/api/polls/manager/${pollId}/attachment`, {
+      method: "POST",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+      body: fd,
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) setMsg({ text: j.error || "Upload failed", ok: false });
     else setMsg({ text: t(locale, "polls.uploaded"), ok: true });
@@ -205,7 +272,11 @@ export function ManagerPollsPanel() {
   }
 
   async function openPublishDialog(pollId: string) {
-    const res = await fetch(`/api/polls/manager/${pollId}`, { cache: "no-store" });
+    const res = await fetch(`/api/polls/manager/${pollId}`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       setMsg({ text: j.error || "Failed", ok: false });
@@ -233,7 +304,8 @@ export function ManagerPollsPanel() {
     }
     const res = await fetch(`/api/polls/manager/${publishId}/publish`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      headers: await pollApiHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({
         thresholdQuestionId: needsThreshold ? thresholdQid : undefined,
         approvalOptionId: needsThreshold ? approvalOid : undefined,
@@ -249,19 +321,31 @@ export function ManagerPollsPanel() {
   }
 
   async function loadResults(pollId: string) {
-    const res = await fetch(`/api/polls/manager/${pollId}/results`, { cache: "no-store" });
+    const res = await fetch(`/api/polls/manager/${pollId}/results`, {
+      cache: "no-store",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) {
       setMsg({ text: j.error || "Failed", ok: false });
       return;
     }
+    if (!isPollManagerResults(j)) {
+      setMsg({ text: "Invalid results", ok: false });
+      return;
+    }
     setResultsId(pollId);
-    setResultsJson(JSON.stringify(j, null, 2));
+    setPollResults(j);
   }
 
   async function closePoll(pollId: string) {
     if (!confirm(t(locale, "polls.closeConfirm"))) return;
-    const res = await fetch(`/api/polls/manager/${pollId}/close`, { method: "POST" });
+    const res = await fetch(`/api/polls/manager/${pollId}/close`, {
+      method: "POST",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) setMsg({ text: j.error || "Failed", ok: false });
     else setMsg({ text: t(locale, "polls.closeDone"), ok: true });
@@ -270,7 +354,11 @@ export function ManagerPollsPanel() {
 
   async function deleteDraft(pollId: string) {
     if (!confirm(t(locale, "polls.deleteDraftConfirm"))) return;
-    const res = await fetch(`/api/polls/manager/${pollId}`, { method: "DELETE" });
+    const res = await fetch(`/api/polls/manager/${pollId}`, {
+      method: "DELETE",
+      credentials: "include",
+      headers: await pollApiHeaders(),
+    });
     const j = await res.json().catch(() => ({}));
     if (!res.ok) setMsg({ text: j.error || "Failed", ok: false });
     else {
@@ -281,6 +369,14 @@ export function ManagerPollsPanel() {
   }
 
   const thresholdOpts = publishQuestions.find((q) => q.id === thresholdQid)?.options || [];
+
+  function categoryScopeLabel(scope: string): string {
+    if (scope === "apartment") return t(locale, "polls.scopeApartment");
+    if (scope === "parking") return t(locale, "polls.scopeParking");
+    if (scope === "garden") return t(locale, "polls.scopeGarden");
+    if (scope === "global") return t(locale, "polls.scopeGlobal");
+    return scope;
+  }
 
   return (
     <Card className="mt-4">
@@ -304,6 +400,7 @@ export function ManagerPollsPanel() {
         </Button>
       </CardHeader>
       {showForm && (
+        <div ref={pollFormSectionRef} className="scroll-mt-20">
         <CardContent className="space-y-4 pt-0">
           <div>
             <Label className="text-xs">{t(locale, "polls.pollTitle")}</Label>
@@ -471,6 +568,7 @@ export function ManagerPollsPanel() {
             )}
           </div>
         </CardContent>
+        </div>
       )}
 
       <CardContent className={showForm ? "pt-0" : ""}>
@@ -483,45 +581,83 @@ export function ManagerPollsPanel() {
           <div className="overflow-x-auto text-sm">
             <table className="w-full min-w-full">
               <thead>
-                <tr className="border-b text-left text-muted-foreground">
-                  <th className="pb-2 pr-2">{t(locale, "polls.pollTitle")}</th>
-                  <th className="pb-2 pr-2">{t(locale, "polls.type")}</th>
-                  <th className="pb-2 pr-2">{t(locale, "polls.status")}</th>
-                  <th className="pb-2">{t(locale, "common.action")}</th>
+                <tr className="border-b text-left">
+                  <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "polls.pollTitle")}</th>
+                  <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "polls.type")}</th>
+                  <th className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "polls.status")}</th>
+                  <th className="pb-3 pr-4 font-medium text-muted-foreground min-w-[12rem]">{t(locale, "common.action")}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-border">
                 {polls.map((p) => (
-                  <tr key={p.id} className="border-b border-border/60">
-                    <td className="py-2 pr-2 font-medium">{p.title}</td>
-                    <td className="py-2 pr-2 text-muted-foreground">{p.classification === "formal_resolution" ? t(locale, "polls.formalShort") : t(locale, "polls.informalShort")}</td>
-                    <td className="py-2 pr-2 capitalize">{p.status}</td>
-                    <td className="py-2 space-x-1 flex flex-wrap">
-                      {p.status === "draft" && (
-                        <>
-                          <Button variant="link" className="h-auto p-0 text-xs" onClick={() => loadDraftForEdit(p.id)}>
-                            {t(locale, "polls.edit")}
-                          </Button>
-                          <Button variant="link" className="h-auto p-0 text-xs" onClick={() => openPublishDialog(p.id)}>
-                            {t(locale, "polls.publish")}
-                          </Button>
-                          <Button variant="link" className="h-auto p-0 text-xs text-red-600" onClick={() => deleteDraft(p.id)}>
-                            {t(locale, "common.delete")}
-                          </Button>
-                        </>
-                      )}
-                      {(p.status === "published" || p.status === "closed") && (
-                        <>
-                          <Button variant="link" className="h-auto p-0 text-xs" onClick={() => loadResults(p.id)}>
-                            {t(locale, "polls.results")}
-                          </Button>
-                          {p.status === "published" && (
-                            <Button variant="link" className="h-auto p-0 text-xs" onClick={() => closePoll(p.id)}>
-                              {t(locale, "polls.close")}
+                  <tr key={p.id} className="hover:bg-muted/30 transition-colors">
+                    <td className="py-3 pr-4 font-medium align-top">{p.title}</td>
+                    <td className="py-3 pr-4 text-muted-foreground align-top">
+                      {p.classification === "formal_resolution" ? t(locale, "polls.formalShort") : t(locale, "polls.informalShort")}
+                    </td>
+                    <td className="py-3 pr-4 capitalize align-top">{p.status}</td>
+                    <td className="py-3 align-top">
+                      <div className="flex flex-wrap gap-1.5">
+                        {p.status === "draft" && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-2.5 text-xs font-medium bg-background"
+                              onClick={() => loadDraftForEdit(p.id)}
+                            >
+                              <Pencil className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                              {t(locale, "polls.edit")}
                             </Button>
-                          )}
-                        </>
-                      )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-8 gap-1.5 px-2.5 text-xs font-medium text-white bg-black hover:bg-black/90 border-0 shadow-sm"
+                              onClick={() => openPublishDialog(p.id)}
+                            >
+                              <Rocket className="size-3.5 shrink-0 opacity-90" aria-hidden />
+                              {t(locale, "polls.publish")}
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-2.5 text-xs font-medium border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                              onClick={() => deleteDraft(p.id)}
+                            >
+                              <Trash2 className="size-3.5 shrink-0" aria-hidden />
+                              {t(locale, "common.delete")}
+                            </Button>
+                          </>
+                        )}
+                        {(p.status === "published" || p.status === "closed") && (
+                          <>
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="sm"
+                              className="h-8 gap-1.5 px-2.5 text-xs font-medium bg-background"
+                              onClick={() => loadResults(p.id)}
+                            >
+                              <BarChart3 className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                              {t(locale, "polls.results")}
+                            </Button>
+                            {p.status === "published" && (
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="h-8 gap-1.5 px-2.5 text-xs font-medium bg-background"
+                                onClick={() => closePoll(p.id)}
+                              >
+                                <Lock className="size-3.5 shrink-0 opacity-80" aria-hidden />
+                                {t(locale, "polls.close")}
+                              </Button>
+                            )}
+                          </>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -532,6 +668,7 @@ export function ManagerPollsPanel() {
       </CardContent>
 
       {publishId && (
+        <div ref={publishSectionRef} className="scroll-mt-20">
         <CardContent className="border-t bg-muted/20 py-4 space-y-3">
           <p className="text-sm font-medium">{t(locale, "polls.publishHeading")}</p>
           {polls.find((x) => x.id === publishId)?.classification === "formal_resolution" && (
@@ -577,18 +714,117 @@ export function ManagerPollsPanel() {
             </Button>
           </div>
         </CardContent>
+        </div>
       )}
 
-      {resultsId && resultsJson && (
-        <CardContent className="border-t py-4 space-y-2">
-          <div className="flex justify-between items-center">
+      {resultsId && pollResults && (
+        <div
+          ref={resultsSectionRef}
+          className="scroll-mt-20 motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-2 motion-safe:duration-300"
+        >
+        <CardContent className="border-t py-4 space-y-4 max-h-[min(70vh,32rem)] overflow-y-auto">
+          <div className="flex justify-between items-center gap-2">
             <span className="text-sm font-medium">{t(locale, "polls.resultsTitle")}</span>
-            <Button size="sm" variant="outline" className="h-8" onClick={() => { setResultsId(null); setResultsJson(""); }}>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-9 shrink-0 bg-background font-medium"
+              onClick={() => {
+                setResultsId(null);
+                setPollResults(null);
+              }}
+            >
               {t(locale, "common.close")}
             </Button>
           </div>
-          <pre className="text-xs bg-muted/50 p-3 rounded-md max-h-80 overflow-auto whitespace-pre-wrap">{resultsJson}</pre>
+
+          <div className="rounded-lg border bg-muted/30 p-3 text-sm space-y-2">
+            <p>
+              <span className="text-muted-foreground">{t(locale, "polls.type")}: </span>
+              <span className="font-medium">
+                {pollResults.classification === "formal_resolution"
+                  ? t(locale, "polls.formalShort")
+                  : t(locale, "polls.informalShort")}
+              </span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">{t(locale, "polls.category")}: </span>
+              <span className="font-medium">{categoryScopeLabel(pollResults.category_scope)}</span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">{t(locale, "polls.resultsRegisteredUnits")}: </span>
+              <span className="font-medium tabular-nums">{pollResults.totalRegisteredUnits}</span>
+            </p>
+            <p>
+              <span className="text-muted-foreground">{t(locale, "polls.status")}: </span>
+              <span className="font-medium">
+                {pollResults.open ? t(locale, "polls.resultsStillOpen") : t(locale, "polls.resultsVotingClosed")}
+              </span>
+            </p>
+            {pollResults.classification === "formal_resolution" && (
+              <>
+                <p>
+                  <span className="text-muted-foreground">{t(locale, "polls.resultsFormalThreshold")}: </span>
+                  <span className="font-medium tabular-nums">{pollResults.thresholdPercent}%</span>
+                </p>
+                <p>
+                  <span className="text-muted-foreground">{t(locale, "polls.resultsApprovalVotes")}: </span>
+                  <span className="font-medium tabular-nums">{pollResults.approvalUnitVotes}</span>
+                </p>
+                {pollResults.resolutionPassed !== null && (
+                  <p>
+                    <span className="text-muted-foreground">{t(locale, "polls.resultsOutcome")}: </span>
+                    <span className="font-medium">
+                      {pollResults.resolutionPassed ? t(locale, "polls.resultsPassed") : t(locale, "polls.resultsNotPassed")}
+                    </span>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+
+          <div className="space-y-4">
+            {pollResults.questions.map((q, qi) => {
+              const maxVotes = Math.max(1, ...q.options.map((o) => o.votes));
+              return (
+                <div key={q.questionId} className="rounded-lg border p-3 space-y-2">
+                  <div className="flex flex-wrap items-baseline justify-between gap-2">
+                    <p className="text-sm font-medium">
+                      {t(locale, "polls.questionN", { n: String(qi + 1) })}: {q.prompt}
+                    </p>
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {q.kind === "multi_select"
+                        ? t(locale, "polls.resultsMultiChoice")
+                        : t(locale, "polls.resultsSingleChoice")}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    {t(locale, "polls.resultsBallots", { count: String(q.participationCount) })}
+                  </p>
+                  <ul className="space-y-2 pt-1">
+                    {q.options.map((o) => (
+                      <li key={o.optionId} className="space-y-1">
+                        <div className="flex justify-between gap-2 text-sm">
+                          <span>{o.label}</span>
+                          <span className="tabular-nums text-muted-foreground shrink-0">
+                            {t(locale, "polls.resultsVotesCount", { count: String(o.votes) })}
+                          </span>
+                        </div>
+                        <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary/80 transition-[width]"
+                            style={{ width: `${(o.votes / maxVotes) * 100}%` }}
+                          />
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              );
+            })}
+          </div>
         </CardContent>
+        </div>
       )}
     </Card>
   );
