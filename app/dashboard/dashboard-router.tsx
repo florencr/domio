@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { getPostLoginDashboard } from "@/lib/dashboard-redirect";
 
 export function DashboardRouter() {
   const router = useRouter();
@@ -11,18 +12,13 @@ export function DashboardRouter() {
     async function route() {
       const supabase = createClient();
       const { data: { user } } = await supabase.auth.getUser();
-      if (!user) { router.push("/login"); return; }
-      let profile: { role?: string } | null = null;
-      const apiRes = await fetch("/api/profile");
-      if (apiRes.ok) profile = await apiRes.json();
-      if (!profile) {
-        const res = await supabase.from("profiles").select("role").eq("id", user.id).single();
-        profile = res.data;
+      if (!user) {
+        router.replace("/login");
+        return;
       }
-      if (profile?.role === "admin") router.push("/dashboard/admin");
-      else if (profile?.role === "manager") router.push("/dashboard/manager");
-      else if (profile?.role === "tenant") router.push("/dashboard/tenant");
-      else router.push("/dashboard/owner");
+      let dest = await getPostLoginDashboard();
+      if (dest === "/dashboard") dest = "/dashboard/resident";
+      router.replace(dest);
     }
     route();
   }, [router]);

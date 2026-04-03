@@ -129,7 +129,7 @@ export default function OwnerBillingPage() {
             </div>
           </div>
           <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
-          <table className="w-full text-sm table-fixed">
+          <table className="w-full min-w-[56rem] text-sm table-fixed">
             <colgroup>
               <col style={{ width: "10%" }} />
               <col style={{ width: "12%" }} />

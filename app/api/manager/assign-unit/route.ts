@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { notifyUsers } from "@/lib/notify-users";
+import { replaceOwnerMembership, replaceTenantMembership } from "@/lib/unit-memberships";
 
 export async function POST(request: Request) {
   try {
@@ -42,11 +43,13 @@ export async function POST(request: Request) {
         if (currentOwnerId) await admin.from("unit_owners").delete().eq("unit_id", unitId);
         const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: ownerId });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await replaceOwnerMembership(admin, unitId, ownerId);
         await admin.from("user_site_assignments").delete().eq("user_id", ownerId);
         await notifyUsers(admin, user.id, new Set([ownerId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
       }
     } else {
       await admin.from("unit_owners").delete().eq("unit_id", unitId);
+      await replaceOwnerMembership(admin, unitId, null);
     }
 
     if (tenantId) {
@@ -59,11 +62,13 @@ export async function POST(request: Request) {
         if (currentTenantId) await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
         const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: tenantId, is_payment_responsible: true });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await replaceTenantMembership(admin, unitId, tenantId, true);
         await admin.from("user_site_assignments").delete().eq("user_id", tenantId);
         await notifyUsers(admin, user.id, new Set([tenantId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});
       }
     } else {
       await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId);
+      await replaceTenantMembership(admin, unitId, null, false);
     }
 
     return NextResponse.json({ success: true });

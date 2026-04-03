@@ -18,16 +18,18 @@ export async function GET() {
 
     const admin = adminClient();
 
-    const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-    const role = (profile as { role?: string } | null)?.role;
-
-    let unitIds: string[] = [];
-    if (role === "owner") {
-      const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id);
-      unitIds = (ownerUnits ?? []).map((u: { unit_id: string }) => u.unit_id);
-    } else if (role === "tenant") {
-      const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id);
-      unitIds = (tenantUnits ?? []).map((u: { unit_id: string }) => u.unit_id);
+    const { data: memRows } = await admin
+      .from("unit_memberships")
+      .select("unit_id")
+      .eq("user_id", user.id)
+      .eq("status", "active");
+    let unitIds = [...new Set((memRows ?? []).map((m: { unit_id: string }) => m.unit_id))];
+    if (!unitIds.length) {
+      const [{ data: ou }, { data: tu }] = await Promise.all([
+        admin.from("unit_owners").select("unit_id").eq("owner_id", user.id),
+        admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id),
+      ]);
+      unitIds = [...new Set([...(ou ?? []).map((u: { unit_id: string }) => u.unit_id), ...(tu ?? []).map((u: { unit_id: string }) => u.unit_id)])];
     }
     if (!unitIds.length) {
       return NextResponse.json({

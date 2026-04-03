@@ -56,17 +56,26 @@ export async function GET(request: Request) {
         else if (a.is_payment_responsible === true) unitPayerMap.set(a.unit_id, a.tenant_id);
       });
       let unitIds: string[] = [];
-      const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id);
-      const myOwnerUnits = (ownerUnits ?? []).map((u: { unit_id: string }) => u.unit_id);
-      const { data: tenantUnits } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id);
-      const myTenantUnits = (tenantUnits ?? []).map((u: { unit_id: string }) => u.unit_id);
+      const { data: ownerMem } = await admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("role", "owner").eq("status", "active");
+      let myOwnerUnits = (ownerMem ?? []).map((u: { unit_id: string }) => u.unit_id);
+      if (!myOwnerUnits.length) {
+        const { data: legacyO } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id);
+        myOwnerUnits = (legacyO ?? []).map((u: { unit_id: string }) => u.unit_id);
+      }
+      const { data: tenantMem } = await admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("role", "tenant").eq("status", "active");
+      let myTenantUnits = (tenantMem ?? []).map((u: { unit_id: string }) => u.unit_id);
+      if (!myTenantUnits.length) {
+        const { data: legacyT } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id);
+        myTenantUnits = (legacyT ?? []).map((u: { unit_id: string }) => u.unit_id);
+      }
       if (payerId === user.id) {
-        if (myOwnerUnits.length) unitIds = myOwnerUnits.filter((uid: string) => (unitPayerMap.get(uid) ?? user.id) === user.id);
-        else unitIds = myTenantUnits.filter((uid: string) => unitPayerMap.get(uid) === user.id);
+        unitIds.push(...myOwnerUnits.filter((uid: string) => (unitPayerMap.get(uid) ?? user.id) === user.id));
+        unitIds.push(...myTenantUnits.filter((uid: string) => unitPayerMap.get(uid) === user.id));
       } else {
         if (myOwnerUnits.length) unitIds = myOwnerUnits.filter((uid: string) => (unitPayerMap.get(uid) ?? user.id) === payerId);
         else return NextResponse.json({ error: "Not authorized" }, { status: 403 });
       }
+      unitIds = [...new Set(unitIds)];
       if (!unitIds.length) return NextResponse.json({ error: "No bills for this period" }, { status: 404 });
       const { data: billsData } = await admin.from("bills")
         .select("id, unit_id, period_month, period_year, total_amount, paid_at, reference_code")
@@ -78,7 +87,7 @@ export async function GET(request: Request) {
         billToName = `${(payerProfile as { name: string }).name} ${(payerProfile as { surname: string }).surname}`;
         billToEmail = (payerProfile as { email?: string }).email ?? null;
       }
-      billToRole = (myOwnerUnits.length && payerId === user.id) ? "Owner" : "Tenant";
+      billToRole = myTenantUnits.some((u) => unitIds.includes(u)) && !myOwnerUnits.some((u) => unitIds.includes(u)) ? "Tenant" : "Owner";
       const unitIdsUsed = [...new Set(bills.map(b => b.unit_id))];
       const units = (await admin.from("units").select("id, unit_name, building_id, size_m2").in("id", unitIdsUsed)).data ?? [];
       const buildIds = [...new Set(units.map((u: { building_id: string }) => u.building_id))];
@@ -95,8 +104,17 @@ export async function GET(request: Request) {
         .select("id, unit_id, period_month, period_year, total_amount, paid_at, reference_code")
         .eq("id", billId!).single();
       if (billErr || !bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
-      const { data: ownership } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id).eq("unit_id", bill.unit_id).single();
-      if (!ownership) return NextResponse.json({ error: "You do not own this unit" }, { status: 403 });
+      const [{ data: ownMem }, { data: tenMem }, { data: ownership }] = await Promise.all([
+        admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("unit_id", bill.unit_id).eq("role", "owner").eq("status", "active").maybeSingle(),
+        admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("unit_id", bill.unit_id).eq("role", "tenant").eq("status", "active").maybeSingle(),
+        admin.from("unit_owners").select("unit_id").eq("owner_id", user.id).eq("unit_id", bill.unit_id).maybeSingle(),
+      ]);
+      const { data: tenAsn } = await admin.from("unit_tenant_assignments").select("unit_id, is_payment_responsible").eq("tenant_id", user.id).eq("unit_id", bill.unit_id).maybeSingle();
+      const isOwnerAuth = !!(ownMem || ownership);
+      const isTenantAuth =
+        !!tenMem ||
+        (!!tenAsn && (tenAsn as { is_payment_responsible?: boolean }).is_payment_responsible !== false);
+      if (!isOwnerAuth && !isTenantAuth) return NextResponse.json({ error: "Not authorized for this bill" }, { status: 403 });
       bills = [bill as (typeof bills)[0]];
       const { data: unit } = await admin.from("units").select("id, unit_name, building_id, size_m2").eq("id", bill.unit_id).single();
       if (!unit) return NextResponse.json({ error: "Unit not found" }, { status: 404 });
@@ -113,7 +131,7 @@ export async function GET(request: Request) {
         billToName = `${ownerProfile.name} ${ownerProfile.surname}`;
         billToEmail = ownerProfile.email ?? null;
       }
-      billToRole = "Owner";
+      billToRole = isOwnerAuth ? "Owner" : "Tenant";
     }
 
     const billIds = bills.map(b => b.id);

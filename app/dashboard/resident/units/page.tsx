@@ -15,7 +15,9 @@ export default function OwnerUnitsPage() {
   const [unitsSortCol, setUnitsSortCol] = useState<string | null>(null);
   const [unitsSortDir, setUnitsSortDir] = useState<"asc" | "desc">("asc");
 
-  const { profile, units, buildings, sites, unitTenantAssignments, tenants } = data;
+  const { units, buildings, sites, unitTenantAssignments, unitOwnerProfiles, tenants, ownerUnitIds } = data;
+  const ownerUnitIdSet = new Set(ownerUnitIds ?? []);
+  const ownerByUnitId = new Map(unitOwnerProfiles.map((o) => [o.unit_id, o]));
   const buildingMap = new Map(buildings.map(b => [b.id, b.name]));
   const siteMap = new Map(sites.map(s => [s.id, s.name]));
   const getSiteName = (buildingId: string) => {
@@ -36,13 +38,19 @@ export default function OwnerUnitsPage() {
   const getUnitValue = (u: { id: string; unit_name: string; building_id: string; type: string; size_m2: number | null }, col: string): string | number => {
     const assigned = unitTenantsMap.get(u.id) ?? [];
     const firstTenant = assigned[0] ? tenantMap.get(assigned[0].tenant_id) : null;
+    const unitOwner = ownerByUnitId.get(u.id);
+    const ownerDisplay = unitOwner ? `${unitOwner.name} ${unitOwner.surname}`.trim() || unitOwner.email : "";
     switch (col) {
       case "unit": return u.unit_name;
       case "site": return getSiteName(u.building_id);
       case "building": return buildingMap.get(u.building_id) ?? "";
       case "type": return u.type;
       case "size": return u.size_m2 ?? 0;
-      case "tenant": return firstTenant ? `${firstTenant.name} ${firstTenant.surname}` : "";
+      case "party":
+        if (ownerUnitIdSet.has(u.id)) {
+          return firstTenant ? `${firstTenant.name} ${firstTenant.surname}` : "";
+        }
+        return ownerDisplay;
       default: return "";
     }
   };
@@ -81,12 +89,13 @@ export default function OwnerUnitsPage() {
               <SortableTh column="entrance" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.entrance")}</SortableTh>
               <SortableTh column="floor" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.floor")}</SortableTh>
               <SortableTh column="size" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} align="center" className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "table.sizeM2")}</SortableTh>
-              <SortableTh column="tenant" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "table.tenant")}</SortableTh>
+              <SortableTh column="party" sortCol={unitsSortCol} sortDir={unitsSortDir} onSort={handleUnitsSort} className="pb-3 pr-2 font-medium text-muted-foreground break-words">{t(locale, "resident.unitsPartyColumn")}</SortableTh>
               <th className="pb-3 pr-2 font-medium text-muted-foreground">{t(locale, "common.actions")}</th>
             </tr></thead>
             <tbody className="divide-y divide-border">
               {sortedUnits.map(u => {
                 const assigned = unitTenantsMap.get(u.id) ?? [];
+                const isOwner = ownerUnitIdSet.has(u.id);
                 return (
                   <tr key={u.id} className="hover:bg-muted/30">
                     <td className="py-3 pr-2 font-medium break-words">{u.unit_name}</td>
@@ -98,32 +107,47 @@ export default function OwnerUnitsPage() {
                     <td className="py-3 pr-2 text-center">{u.size_m2 ?? "—"}</td>
                     <td className="py-3 pr-2 break-words">
                       <div className="flex flex-col gap-1 min-w-0">
-                        {assigned.map(a => {
-                          const tenant = tenantMap.get(a.tenant_id);
-                          const isResp = a.is_payment_responsible !== false;
-                          return tenant ? (
-                            <div key={a.tenant_id} className="flex flex-col gap-1 min-w-0">
-                              <span className="text-sm break-words">{tenant.name} {tenant.surname}</span>
-                              <label className="flex items-center gap-1.5 cursor-pointer">
-                                <input type="checkbox" checked={isResp} onChange={(e) => setPaymentResponsible(u.id, a.tenant_id, e.target.checked)} className="rounded border-input size-4" />
-                                <span className="text-xs text-muted-foreground">{t(locale, "owner.responsibleForPayment")}</span>
-                              </label>
-                            </div>
-                          ) : null;
-                        })}
-                        {assigned.length === 0 && tenants.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
-                        {assigned.length === 0 && tenants.length > 0 && <span className="text-xs text-muted-foreground">—</span>}
+                        {isOwner ? (
+                          <>
+                            {assigned.map(a => {
+                              const tenant = tenantMap.get(a.tenant_id);
+                              const isResp = a.is_payment_responsible !== false;
+                              return tenant ? (
+                                <div key={a.tenant_id} className="flex flex-col gap-1 min-w-0">
+                                  <span className="text-sm break-words">{tenant.name} {tenant.surname}</span>
+                                  <label className="flex items-center gap-1.5 cursor-pointer">
+                                    <input type="checkbox" checked={isResp} onChange={(e) => setPaymentResponsible(u.id, a.tenant_id, e.target.checked)} className="rounded border-input size-4" />
+                                    <span className="text-xs text-muted-foreground">{t(locale, "owner.responsibleForPayment")}</span>
+                                  </label>
+                                </div>
+                              ) : null;
+                            })}
+                            {assigned.length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                          </>
+                        ) : (
+                          (() => {
+                            const o = ownerByUnitId.get(u.id);
+                            const label = o ? `${o.name} ${o.surname}`.trim() : "";
+                            if (!o || (!label && !o.email)) return <span className="text-xs text-muted-foreground">—</span>;
+                            return (
+                              <div className="flex flex-col gap-0.5 min-w-0">
+                                {label ? <span className="text-sm break-words">{label}</span> : null}
+                                {o.email ? <span className="text-xs text-muted-foreground break-all">{o.email}</span> : null}
+                              </div>
+                            );
+                          })()
+                        )}
                       </div>
                     </td>
                     <td className="py-3 pr-2">
                       <div className="flex flex-col gap-1 min-w-0">
-                        {assigned.map(a => {
+                        {isOwner && assigned.map(a => {
                           const tenant = tenantMap.get(a.tenant_id);
                           return tenant ? (
                             <Button key={a.tenant_id} size="sm" variant="ghost" className="h-6 text-xs text-red-600 w-fit" onClick={() => removeTenant(u.id, a.tenant_id)}>{t(locale, "owner.remove")}</Button>
                           ) : null;
                         })}
-                        {tenants.length > 0 ? (
+                        {isOwner && tenants.length > 0 ? (
                           (() => { const avail = tenants.filter(tn => !assigned.some(a => a.tenant_id === tn.id)); return avail.length > 0 && (
                             <div className="flex flex-col gap-1 min-w-0">
                               <label className="flex items-center gap-1.5 cursor-pointer">
@@ -139,7 +163,9 @@ export default function OwnerUnitsPage() {
                               </Select>
                             </div>
                           ); })()
-                        ) : assigned.length === 0 && <span className="text-xs text-muted-foreground">{t(locale, "owner.noTenantUsers")}</span>}
+                        ) : null}
+                        {isOwner && !assigned.length && tenants.length === 0 && <span className="text-xs text-muted-foreground">{t(locale, "owner.noTenantUsers")}</span>}
+                        {!isOwner && !assigned.length && <span className="text-xs text-muted-foreground">—</span>}
                       </div>
                     </td>
                   </tr>

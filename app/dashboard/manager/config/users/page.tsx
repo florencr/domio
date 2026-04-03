@@ -26,12 +26,13 @@ function Avatar({ profile, large = false }: { profile: Profile; large?: boolean 
 export default function ConfigUsersPage() {
   const { data, load, loading } = useManagerData();
   const [showCreate, setShowCreate] = useState(false);
-  const [f, setF] = useState({ name: "", surname: "", email: "", password: "", phone: "", role: "owner" });
+  const [f, setF] = useState({ name: "", surname: "", email: "", password: "", phone: "" });
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [assigningUnit, setAssigningUnit] = useState<{ profileId: string } | null>(null);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [editF, setEditF] = useState({ name: "", surname: "", phone: "", role: "" });
+  const [editF, setEditF] = useState({ name: "", surname: "", phone: "" });
+  const [assignAsOwner, setAssignAsOwner] = useState(true);
   const [newPassword, setNewPassword] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
 
@@ -58,7 +59,7 @@ export default function ConfigUsersPage() {
       const r = await res.json();
       if (r.success) {
         setMsg({ text: t(locale, "configUsers.userCreated"), ok: true });
-        setF({ name: "", surname: "", email: "", password: "", phone: "", role: "owner" });
+        setF({ name: "", surname: "", email: "", password: "", phone: "" });
         setShowCreate(false);
         load();
       } else setMsg({ text: r.error ?? t(locale, "common.failed"), ok: false });
@@ -69,7 +70,7 @@ export default function ConfigUsersPage() {
 
   async function saveEdit() {
     if (!editingUser) return;
-    const res = await fetch("/api/users/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: editingUser.id, ...editF }) });
+    const res = await fetch("/api/users/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: editingUser.id, name: editF.name, surname: editF.surname, phone: editF.phone }) });
     const r = await res.json();
     if (r.success) {
       setMsg({ text: "User updated.", ok: true });
@@ -104,14 +105,13 @@ export default function ConfigUsersPage() {
 
   async function assignUnit(profileId: string, unitId: string) {
     if (!editingUser) return;
-    const isOwner = editingUser.role === "owner";
     const res = await fetch("/api/manager/assign-unit", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         unitId,
-        ownerId: isOwner ? profileId : (ownerMap.get(unitId) ?? null),
-        tenantId: isOwner ? (tenantMap.get(unitId) ?? null) : profileId,
+        ownerId: assignAsOwner ? profileId : (ownerMap.get(unitId) ?? null),
+        tenantId: assignAsOwner ? (tenantMap.get(unitId) ?? null) : profileId,
       }),
     });
     const j = await res.json();
@@ -155,14 +155,25 @@ export default function ConfigUsersPage() {
   }
 
   const roleBadge = (role: string) => {
-    const styles: Record<string, string> = { manager: "bg-purple-100 text-purple-700", owner: "bg-blue-100 text-blue-700", tenant: "bg-green-100 text-green-700" };
-    const labels: Record<string, string> = { manager: t(locale, "manager.managerRole"), owner: t(locale, "common.owner"), tenant: t(locale, "table.tenant") };
+    const styles: Record<string, string> = {
+      manager: "bg-purple-100 text-purple-700",
+      owner: "bg-blue-100 text-blue-700",
+      tenant: "bg-green-100 text-green-700",
+      resident: "bg-slate-100 text-slate-600",
+    };
+    const labels: Record<string, string> = {
+      manager: t(locale, "manager.managerRole"),
+      owner: t(locale, "common.owner"),
+      tenant: t(locale, "table.tenant"),
+      resident: t(locale, "common.resident"),
+    };
     return <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${styles[role] ?? "bg-gray-100 text-gray-600"}`}>{labels[role] ?? role}</span>;
   };
 
   const unitsForAssignment = data.units.filter(u => {
-    if (editingUser?.role === "owner") return !ownerMap.has(u.id) || ownerMap.get(u.id) === editingUser.id;
-    return !tenantMap.has(u.id) || tenantMap.get(u.id) === editingUser?.id;
+    if (!editingUser) return false;
+    if (assignAsOwner) return !ownerMap.has(u.id) || ownerMap.get(u.id) === editingUser.id;
+    return !tenantMap.has(u.id) || tenantMap.get(u.id) === editingUser.id;
   });
 
   return (
@@ -184,13 +195,8 @@ export default function ConfigUsersPage() {
               <div><Label>{t(locale, "auth.surname")}</Label><Input value={f.surname} onChange={e => setF({ ...f, surname: e.target.value })} required /></div>
               <div><Label>{t(locale, "common.email")}</Label><Input type="email" value={f.email} onChange={e => setF({ ...f, email: e.target.value })} required /></div>
               <div><Label>{t(locale, "auth.password")}</Label><Input type="password" value={f.password} onChange={e => setF({ ...f, password: e.target.value })} required minLength={6} /></div>
-              <div><Label>{t(locale, "common.phone")}</Label><Input value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} placeholder="+355..." /></div>
-              <div><Label>Role</Label>
-                <Select value={f.role} onValueChange={v => setF({ ...f, role: v })}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent><SelectItem value="owner">Owner</SelectItem><SelectItem value="tenant">Tenant</SelectItem></SelectContent>
-                </Select>
-              </div>
+              <div className="col-span-2 md:col-span-1"><Label>{t(locale, "common.phone")}</Label><Input value={f.phone} onChange={e => setF({ ...f, phone: e.target.value })} placeholder="+355..." /></div>
+              <p className="col-span-2 md:col-span-3 text-xs text-muted-foreground">{t(locale, "configUsers.createThenAssignUnits")}</p>
               <div className="col-span-2 md:col-span-3 flex gap-2">
                 <Button type="submit">{t(locale, "configUsers.createUser")}</Button>
                 <Button type="button" variant="outline" onClick={() => setShowCreate(false)}>Cancel</Button>
@@ -225,7 +231,14 @@ export default function ConfigUsersPage() {
                         <div className="text-xs text-muted-foreground">{p.phone ? <a href={`tel:${p.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{p.phone}</a> : ""}</div>
                       </td>
                       <td className="px-3 py-3 text-xs text-muted-foreground">{p.email}</td>
-                      <td className="px-3 py-3">{roleBadge(p.role)}</td>
+                      <td className="px-3 py-3">
+                        <div className="flex flex-wrap gap-1">
+                          {p.role === "manager" ? roleBadge("manager") : null}
+                          {p.role !== "manager" && data.unitOwners.some(o => o.owner_id === p.id) ? roleBadge("owner") : null}
+                          {p.role !== "manager" && data.unitTenantAssignments.some(a => a.tenant_id === p.id) ? roleBadge("tenant") : null}
+                          {p.role !== "manager" && p.role === "resident" && !data.unitOwners.some(o => o.owner_id === p.id) && !data.unitTenantAssignments.some(a => a.tenant_id === p.id) ? roleBadge("resident") : null}
+                        </div>
+                      </td>
                       <td className="px-3 py-3">
                         {assignedNames.length > 0
                           ? <div className="flex flex-wrap gap-1">{assignedNames.map((n, i) => <span key={i} className="text-xs bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-400 border border-blue-200 dark:border-blue-800 px-1.5 py-0.5 rounded">{n}</span>)}</div>
@@ -239,7 +252,8 @@ export default function ConfigUsersPage() {
                               setNewPassword("");
                             } else {
                               setEditingUser(p);
-                              setEditF({ name: p.name, surname: p.surname, phone: p.phone ?? "", role: p.role });
+                              setEditF({ name: p.name, surname: p.surname, phone: p.phone ?? "" });
+                              setAssignAsOwner(true);
                               setNewPassword("");
                               setShowCreate(false);
                             }
@@ -276,14 +290,9 @@ export default function ConfigUsersPage() {
                     <div><Label className="text-xs">Name</Label><Input value={editF.name} onChange={e => setEditF({ ...editF, name: e.target.value })} className="h-8 text-sm" /></div>
                     <div><Label className="text-xs">{t(locale, "auth.surname")}</Label><Input value={editF.surname} onChange={e => setEditF({ ...editF, surname: e.target.value })} className="h-8 text-sm" /></div>
                     <div className="col-span-2"><Label className="text-xs">{t(locale, "common.email")}</Label><Input value={editingUser.email} disabled className="h-8 text-sm bg-muted text-muted-foreground cursor-not-allowed" /></div>
-                    <div><Label className="text-xs">{t(locale, "common.phone")}</Label><Input value={editF.phone} onChange={e => setEditF({ ...editF, phone: e.target.value })} className="h-8 text-sm" placeholder="+355..." /></div>
-                    <div><Label className="text-xs">{t(locale, "common.role")}</Label>
-                      <Select value={editF.role} onValueChange={v => setEditF({ ...editF, role: v })}>
-                        <SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger>
-                        <SelectContent><SelectItem value="owner">{t(locale, "common.owner")}</SelectItem><SelectItem value="tenant">{t(locale, "table.tenant")}</SelectItem></SelectContent>
-                      </Select>
-                    </div>
+                    <div className="col-span-2"><Label className="text-xs">{t(locale, "common.phone")}</Label><Input value={editF.phone} onChange={e => setEditF({ ...editF, phone: e.target.value })} className="h-8 text-sm" placeholder="+355..." /></div>
                   </div>
+                  <p className="text-xs text-muted-foreground mt-2">{t(locale, "configUsers.rolePerUnitHint")}</p>
                   <Button size="sm" className="mt-2 w-full" onClick={saveEdit}>{t(locale, "configUsers.saveProfile")}</Button>
                 </div>
 
@@ -297,13 +306,19 @@ export default function ConfigUsersPage() {
                       </div>
                     ))}
                     {assigningUnit?.profileId === editingUser.id ? (
-                      <div className="flex gap-2">
+                      <div className="space-y-2">
+                        <div className="flex gap-2 flex-wrap">
+                          <Button type="button" size="sm" variant={assignAsOwner ? "secondary" : "outline"} className="h-8 text-xs" onClick={() => setAssignAsOwner(true)}>{t(locale, "common.owner")}</Button>
+                          <Button type="button" size="sm" variant={!assignAsOwner ? "secondary" : "outline"} className="h-8 text-xs" onClick={() => setAssignAsOwner(false)}>{t(locale, "table.tenant")}</Button>
+                        </div>
+                        <div className="flex gap-2">
                         <Select value={selectedUnit} onValueChange={setSelectedUnit}>
                           <SelectTrigger className="h-8 flex-1"><SelectValue placeholder={t(locale, "configUsers.selectUnit")} /></SelectTrigger>
                           <SelectContent>{unitsForAssignment.map(u => <SelectItem key={u.id} value={u.id}>{u.unit_name}</SelectItem>)}</SelectContent>
                         </Select>
                         <Button size="sm" className="h-8" onClick={() => selectedUnit && assignUnit(editingUser.id, selectedUnit)} disabled={!selectedUnit}>{t(locale, "configUsers.assign")}</Button>
                         <Button size="sm" variant="ghost" className="h-8" onClick={() => { setAssigningUnit(null); setSelectedUnit(""); }}>Cancel</Button>
+                        </div>
                       </div>
                     ) : (
                       <Button size="sm" variant="outline" className="w-full h-8 text-xs" onClick={() => { setAssigningUnit({ profileId: editingUser.id }); setSelectedUnit(""); }}>+ Assign unit</Button>

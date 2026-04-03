@@ -31,7 +31,7 @@ export async function GET(request: Request) {
         name,
         surname,
         email,
-        role: "owner",
+        role: "resident",
       });
     }
   }

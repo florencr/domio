@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import type { NotificationItem } from "@/components/NotificationBell";
 import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
+import { ResidentPollsSection } from "./resident-polls-section";
 
 export default function OwnerNotificationsPage() {
   const { locale } = useLocale();
@@ -17,8 +18,14 @@ export default function OwnerNotificationsPage() {
   }, []);
 
   return (
+    <>
     <Card className="mt-2">
-      <CardHeader><CardTitle>{t(locale, "notifications.bellTitle")} ({notifications.length})</CardTitle></CardHeader>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <span className="rounded bg-slate-200 dark:bg-slate-800 text-xs px-2 py-0.5 font-semibold">{t(locale, "polls.badgeMessages")}</span>
+          {t(locale, "notifications.bellTitle")} ({notifications.length})
+        </CardTitle>
+      </CardHeader>
       <CardContent>
         {notifications.length === 0 ? (
           <p className="py-8 text-center text-muted-foreground">{t(locale, "notifications.noNotificationsYet")}</p>
@@ -38,5 +45,8 @@ export default function OwnerNotificationsPage() {
         )}
       </CardContent>
     </Card>
+
+    <ResidentPollsSection />
+    </>
   );
 }

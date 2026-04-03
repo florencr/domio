@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 
-/** Manager creates owner/tenant - auto-assigns to manager's site. User appears in manager dashboard. */
+/** Manager creates a resident user; owner/tenant is set per unit when assigning. */
 export async function POST(request: Request) {
   try {
     const sb = await createClient();
@@ -20,13 +20,11 @@ export async function POST(request: Request) {
     const { data: site } = await admin.from("sites").select("id").eq("manager_id", user.id).single();
     if (!site?.id) return NextResponse.json({ success: false, error: "No site" }, { status: 403 });
 
-    const { email, password, name, surname, phone, role } = await request.json();
-    if (!email || !password || !name || !surname || !role) {
-      return NextResponse.json({ success: false, error: "email, password, name, surname, role required" }, { status: 400 });
+    const { email, password, name, surname, phone } = await request.json();
+    if (!email || !password || !name || !surname) {
+      return NextResponse.json({ success: false, error: "email, password, name, surname required" }, { status: 400 });
     }
-    if (role !== "owner" && role !== "tenant") {
-      return NextResponse.json({ success: false, error: "role must be owner or tenant" }, { status: 400 });
-    }
+    const profileRole = "resident";
 
     const { data: authData, error: authError } = await admin.auth.admin.createUser({
       email,
@@ -37,7 +35,8 @@ export async function POST(request: Request) {
     let userId: string;
     if (authError?.message?.toLowerCase().includes("already") || authError?.message?.toLowerCase().includes("already registered") || authError?.message?.toLowerCase().includes("already in use")) {
       const { data: existingProfile } = await admin.from("profiles").select("id, role").eq("email", email).single();
-      if (!existingProfile || ((existingProfile.role as string) !== "owner" && (existingProfile.role as string) !== "tenant")) {
+      const er = ((existingProfile?.role as string) || "");
+      if (!existingProfile || (er !== "owner" && er !== "tenant" && er !== "resident")) {
         return NextResponse.json({ success: false, error: authError?.message ?? "Email already in use. Use a different email or ask admin to assign this user to your site." }, { status: 400 });
       }
       userId = existingProfile.id;
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
         name,
         surname,
         phone: phone || null,
-        role,
+        role: profileRole,
       });
       if (profileError) {
         return NextResponse.json({ success: false, error: profileError.message }, { status: 400 });

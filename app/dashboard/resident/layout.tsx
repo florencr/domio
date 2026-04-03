@@ -1,7 +1,8 @@
 "use client";
 
+import { Suspense } from "react";
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,16 +15,19 @@ import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
 
 const NAV_KEYS = [
-  { href: "/dashboard/owner/units", key: "nav.owner.myUnits", icon: Home },
-  { href: "/dashboard/owner/billing", key: "nav.owner.billing", icon: FileText },
-  { href: "/dashboard/owner/payments", key: "nav.owner.payments", icon: CreditCard },
-  { href: "/dashboard/owner/ledger", key: "nav.owner.ledger", icon: BookOpen },
-  { href: "/dashboard/owner/notifications", key: "nav.owner.notifications", icon: Bell },
+  { href: "/dashboard/resident/units", key: "nav.owner.myUnits", icon: Home },
+  { href: "/dashboard/resident/billing", key: "nav.owner.billing", icon: FileText },
+  { href: "/dashboard/resident/payments", key: "nav.owner.payments", icon: CreditCard },
+  { href: "/dashboard/resident/ledger", key: "nav.owner.ledger", icon: BookOpen },
+  { href: "/dashboard/resident/notifications", key: "nav.owner.notifications", icon: Bell },
 ];
 
 function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const unitQs = searchParams.get("unit") ? `?unit=${encodeURIComponent(searchParams.get("unit")!)}` : "";
+  const withUnit = (href: string) => (unitQs ? `${href.split("?")[0]}${unitQs}` : href);
   const { data, loading } = useOwnerData();
   const { locale } = useLocale();
 
@@ -53,15 +57,15 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   return (
     <div className="min-h-screen bg-muted/20 p-4 md:p-6">
         <header className="sticky top-0 z-30 -mx-4 -mt-4 px-4 pt-4 pb-2 mb-4 md:static md:mx-0 md:mt-0 md:px-0 md:pt-0 md:pb-0 md:mb-6 bg-white/90 dark:bg-background/90 backdrop-blur-sm md:bg-transparent flex items-center justify-between">
-          <Link href="/dashboard/owner" className="flex items-center gap-2">
+          <Link href="/dashboard/resident" className="flex items-center gap-2">
             <DomioLogo className="h-9 w-auto shrink-0" />
-            <span className="hidden md:inline text-sm font-medium text-muted-foreground whitespace-nowrap">{t(locale, "owner.ownerDashboard")}</span>
+            <span className="hidden md:inline text-sm font-medium text-muted-foreground whitespace-nowrap">{t(locale, "resident.dashboardLabel")}</span>
           </Link>
           <div className="flex items-center gap-2 md:gap-2">
-            <Link href="/dashboard/owner/preferences">
+            <Link href="/dashboard/resident/preferences">
               <Button variant="ghost" size="icon" title={t(locale, "common.preferences")}><SlidersHorizontal className="size-5" /></Button>
             </Link>
-            <NotificationBell onSeeAllClick={() => router.push("/dashboard/owner/notifications")} />
+            <NotificationBell onSeeAllClick={() => router.push("/dashboard/resident/notifications")} />
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="h-9 gap-2 px-2 md:px-3">
@@ -78,7 +82,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
                   {profile?.phone && <p className="text-sm text-muted-foreground"><a href={`tel:${profile.phone.replace(/[\s\-\(\)\.]/g, "")}`} className="text-primary hover:underline">{profile.phone}</a></p>}
                 </div>
                 <DropdownMenuSeparator />
-                <Link href="/dashboard/owner/account">
+                <Link href="/dashboard/resident/account">
                   <DropdownMenuItem className="gap-2 cursor-pointer">
                     <User className="size-4" />
                     {t(locale, "nav.config.account")}
@@ -137,7 +141,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
           {NAV_KEYS.map(({ href, key, icon: Icon }) => {
             const isActive = pathname === href;
             return (
-              <Link key={href} href={href}>
+              <Link key={href} href={withUnit(href)}>
                 <Button
                   variant={isActive ? "secondary" : "ghost"}
                   size="sm"
@@ -160,10 +164,10 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
             {NAV_KEYS.map(({ href, key, icon: Icon }) => {
               const isActive = pathname === href;
               return (
-                <Link key={href} href={href} className={`flex flex-col items-center justify-center gap-0.5 text-xs font-semibold rounded-md ${isActive ? "bg-muted" : ""}`}>
-                  <Icon className="size-4" />
-                  {t(locale, key)}
-                </Link>
+              <Link key={href} href={withUnit(href)} className={`flex flex-col items-center justify-center gap-0.5 text-xs font-semibold rounded-md ${isActive ? "bg-muted" : ""}`}>
+                <Icon className="size-4" />
+                {t(locale, key)}
+              </Link>
               );
             })}
           </nav>
@@ -172,10 +176,18 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   );
 }
 
-export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+function OwnerLayoutShell({ children }: { children: React.ReactNode }) {
   return (
     <OwnerDataProvider>
       <OwnerLayoutInner>{children}</OwnerLayoutInner>
     </OwnerDataProvider>
+  );
+}
+
+export default function OwnerLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>}>
+      <OwnerLayoutShell>{children}</OwnerLayoutShell>
+    </Suspense>
   );
 }

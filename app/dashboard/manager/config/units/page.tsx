@@ -117,8 +117,10 @@ export default function ConfigUnitsPage() {
     } else setMsg({ text: error.message, ok: false });
   }
 
-  const owners = data.profiles.filter(p => p.role === "owner");
-  const tenants = data.profiles.filter(p => p.role === "tenant");
+  const ownerIds = new Set(data.unitOwners.map(o => o.owner_id));
+  const tenantIds = new Set(data.unitTenantAssignments.map(a => a.tenant_id));
+  const owners = data.profiles.filter(p => ownerIds.has(p.id));
+  const tenants = data.profiles.filter(p => tenantIds.has(p.id));
 
   return (
     <div className="space-y-4">

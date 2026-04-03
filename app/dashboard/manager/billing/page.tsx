@@ -308,7 +308,7 @@ export default function ManagerBillingPage() {
             </div>
           </div>
           <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
-            <table className="w-full text-sm table-fixed">
+            <table className="w-full min-w-[64rem] text-sm table-fixed">
             <colgroup>
               <col style={{ width: "8%" }} />
               <col style={{ width: "10%" }} />

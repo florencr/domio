@@ -10,9 +10,25 @@ function adminClient() {
   );
 }
 
+async function tenantUnitIds(admin: ReturnType<typeof adminClient>, userId: string): Promise<string[]> {
+  const { data: memRows, error: memErr } = await admin
+    .from("unit_memberships")
+    .select("unit_id")
+    .eq("user_id", userId)
+    .eq("role", "tenant")
+    .eq("status", "active");
+  if (!memErr && memRows?.length) {
+    return (memRows as { unit_id: string }[]).map((r) => r.unit_id);
+  }
+  const { data: legacy } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", userId);
+  return (legacy ?? []).map((u: { unit_id: string }) => u.unit_id);
+}
+
 // Fetch tenant dashboard data using service role (bypasses RLS)
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url);
+    const filterUnitId = searchParams.get("unitId");
     const sb = await createClient();
     const { data: { session } } = await sb.auth.getSession();
     const user = session?.user ?? null;
@@ -20,13 +36,15 @@ export async function GET() {
 
     const admin = adminClient();
 
-    const [profileRes, tenantAssignmentsRes] = await Promise.all([
-      admin.from("profiles").select("id, name, surname, email, role, phone").eq("id", user.id).single(),
-      admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id),
-    ]);
+    const { data: profile } = await admin.from("profiles").select("id, name, surname, email, role, phone").eq("id", user.id).single();
 
-    const profile = profileRes.data;
-    const unitIds = (tenantAssignmentsRes.data ?? []).map((u: { unit_id: string }) => u.unit_id);
+    let unitIds = await tenantUnitIds(admin, user.id);
+
+    if (filterUnitId) {
+      const ok = unitIds.some((id) => id === filterUnitId);
+      if (!ok) return NextResponse.json({ error: "Not a tenant of this unit" }, { status: 403 });
+      unitIds = [filterUnitId];
+    }
 
     if (!unitIds.length) {
       const allUnits = (await admin.from("units").select("id, unit_name")).data ?? [];
@@ -62,9 +80,9 @@ export async function GET() {
     const allBills = (billsRes.data ?? []).filter((b: { unit_id: string }) => myPayingUnitIds.has(b.unit_id));
     const buildings = buildingsRes.data ?? [];
     const buildingIds = [...new Set((unitsRes.data ?? []).map((u: { building_id: string }) => u.building_id).filter(Boolean))];
-    const siteIds = [...new Set((buildings as { site_id: string | null }[]).map(b => b.site_id).filter(Boolean))] as string[];
+    const siteIds = [...new Set((buildings as { site_id: string | null }[]).map((b) => b.site_id).filter(Boolean))] as string[];
     const { data: sitesData } = siteIds.length ? await admin.from("sites").select("id, name").in("id", siteIds) : { data: [] };
-    const siteNames = ((sitesData ?? []) as { name: string }[]).map(s => s.name);
+    const siteNames = ((sitesData ?? []) as { name: string }[]).map((s) => s.name);
 
     return NextResponse.json({
       profile,

@@ -24,31 +24,52 @@ export async function POST(request: Request) {
     const admin = adminClient();
 
     if (periodMonth != null && periodYear != null) {
-      // Consolidated: record slip for bills. Owner can upload for any of their units (own or tenant's). Tenant can only upload for their own.
+      // Consolidated: owner (per unit membership) can upload for payer on their units; tenant only for self as payer.
       let unitIds: string[] = [];
-      const { data: ownerUnits } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id);
-      const ownerUnitIds = (ownerUnits ?? []).map((u: { unit_id: string }) => u.unit_id);
-      const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
+      const { data: ownerMem } = await admin
+        .from("unit_memberships")
+        .select("unit_id")
+        .eq("user_id", user.id)
+        .eq("role", "owner")
+        .eq("status", "active");
+      let ownerUnitIds = (ownerMem ?? []).map((u: { unit_id: string }) => u.unit_id);
+      if (!ownerUnitIds.length) {
+        const { data: legacyO } = await admin.from("unit_owners").select("unit_id").eq("owner_id", user.id);
+        ownerUnitIds = (legacyO ?? []).map((u: { unit_id: string }) => u.unit_id);
+      }
+      const { data: tenantMem } = await admin
+        .from("unit_memberships")
+        .select("unit_id")
+        .eq("user_id", user.id)
+        .eq("role", "tenant")
+        .eq("status", "active");
+      let tenantUnitIds = (tenantMem ?? []).map((u: { unit_id: string }) => u.unit_id);
+      if (!tenantUnitIds.length) {
+        const { data: legacyT } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id);
+        tenantUnitIds = (legacyT ?? []).map((u: { unit_id: string }) => u.unit_id);
+      }
       const paymentResponsibleId = body.paymentResponsibleId ?? user.id;
-      let unitPayerMap = new Map<string, string>();
-      if (profile?.role === "owner") {
+      const unitPayerMap = new Map<string, string>();
+      if (ownerUnitIds.length) {
         const { data: asn } = await admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", ownerUnitIds.length ? ownerUnitIds : ["__none__"]);
         (asn ?? []).forEach((a: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }) => {
           if (!unitPayerMap.has(a.unit_id) && a.is_payment_responsible !== false) unitPayerMap.set(a.unit_id, a.tenant_id);
           else if (a.is_payment_responsible === true) unitPayerMap.set(a.unit_id, a.tenant_id);
         });
-        unitIds = ownerUnitIds.filter((uid: string) => (unitPayerMap.get(uid) ?? user.id) === paymentResponsibleId);
-      } else {
-        if (paymentResponsibleId !== user.id) return NextResponse.json({ error: "Tenant can only upload for their own bills" }, { status: 403 });
-        const { data: myAssignments } = await admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id);
-        const myUnitIds = (myAssignments ?? []).map((u: { unit_id: string }) => u.unit_id);
-        const { data: asn } = await admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", myUnitIds.length ? myUnitIds : ["__none__"]);
-        (asn ?? []).forEach((a: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }) => {
-          if (!unitPayerMap.has(a.unit_id) && a.is_payment_responsible !== false) unitPayerMap.set(a.unit_id, a.tenant_id);
-          else if (a.is_payment_responsible === true) unitPayerMap.set(a.unit_id, a.tenant_id);
-        });
-        unitIds = myUnitIds.filter((uid: string) => unitPayerMap.get(uid) === user.id);
+        unitIds.push(...ownerUnitIds.filter((uid: string) => (unitPayerMap.get(uid) ?? user.id) === paymentResponsibleId));
       }
+      if (tenantUnitIds.length && paymentResponsibleId === user.id) {
+        const { data: asn } = await admin.from("unit_tenant_assignments").select("unit_id, tenant_id, is_payment_responsible").in("unit_id", tenantUnitIds.length ? tenantUnitIds : ["__none__"]);
+        const tpm = new Map<string, string>();
+        (asn ?? []).forEach((a: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }) => {
+          if (!tpm.has(a.unit_id) && a.is_payment_responsible !== false) tpm.set(a.unit_id, a.tenant_id);
+          else if (a.is_payment_responsible === true) tpm.set(a.unit_id, a.tenant_id);
+        });
+        unitIds.push(...tenantUnitIds.filter((uid: string) => tpm.get(uid) === user.id));
+      } else if (tenantUnitIds.length && paymentResponsibleId !== user.id && !ownerUnitIds.length) {
+        return NextResponse.json({ error: "Tenant can only upload for their own bills" }, { status: 403 });
+      }
+      unitIds = [...new Set(unitIds)];
       if (!unitIds.length) return NextResponse.json({ error: "No bills for this period" }, { status: 403 });
       const { data: urlData } = admin.storage.from("payment-slips").getPublicUrl(receipt_path);
       const update = { receipt_url: urlData.publicUrl, receipt_filename: receipt_filename ?? receipt_path, receipt_path, status: "in_process" };
@@ -61,12 +82,14 @@ export async function POST(request: Request) {
     const { data: bill, error: billErr } = await admin.from("bills").select("id, unit_id").eq("id", billId).single();
     if (billErr || !bill) return NextResponse.json({ error: "Bill not found" }, { status: 404 });
 
-    const [ownerRes, tenantRes] = await Promise.all([
+    const [ownerMem, tenantMem, ownerRes, tenantRes] = await Promise.all([
+      admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("unit_id", bill.unit_id).eq("role", "owner").eq("status", "active"),
+      admin.from("unit_memberships").select("unit_id").eq("user_id", user.id).eq("unit_id", bill.unit_id).eq("role", "tenant").eq("status", "active"),
       admin.from("unit_owners").select("unit_id").eq("owner_id", user.id).eq("unit_id", bill.unit_id),
       admin.from("unit_tenant_assignments").select("unit_id").eq("tenant_id", user.id).eq("unit_id", bill.unit_id).eq("is_payment_responsible", true),
     ]);
-    const isOwner = (ownerRes.data ?? []).length > 0;
-    const isTenant = (tenantRes.data ?? []).length > 0;
+    const isOwner = (ownerMem.data ?? []).length > 0 || (ownerRes.data ?? []).length > 0;
+    const isTenant = (tenantMem.data ?? []).length > 0 || (tenantRes.data ?? []).length > 0;
     if (!isOwner && !isTenant) return NextResponse.json({ error: "Not authorized for this bill" }, { status: 403 });
 
     const { data: urlData } = admin.storage.from("payment-slips").getPublicUrl(receipt_path);

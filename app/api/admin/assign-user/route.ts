@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { notifyUsers } from "@/lib/notify-users";
+import { replaceOwnerMembership, replaceTenantMembership } from "@/lib/unit-memberships";
 
 async function requireAdmin() {
   const sb = await createClient();
@@ -28,7 +29,8 @@ export async function POST(request: Request) {
     if (role !== "owner" && role !== "tenant") return NextResponse.json({ error: "role must be owner or tenant" }, { status: 400 });
 
     const { data: profile } = await admin.from("profiles").select("role").eq("id", userId).single();
-    if (!profile || (profile as { role: string }).role !== role) return NextResponse.json({ error: "User role does not match" }, { status: 400 });
+    const pr = (profile as { role?: string } | null)?.role;
+    if (!profile || pr === "admin" || pr === "manager") return NextResponse.json({ error: "Invalid user for unit assignment" }, { status: 400 });
 
     if (siteId && !unitId) {
       const { error } = await admin.from("user_site_assignments").upsert({ user_id: userId, site_id: siteId }, { onConflict: "user_id" });
@@ -44,12 +46,14 @@ export async function POST(request: Request) {
         if (existing) return NextResponse.json({ error: "Unit already has an owner. Release the current owner first before assigning another." }, { status: 400 });
         const { error } = await admin.from("unit_owners").insert({ unit_id: unitId, owner_id: userId });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await replaceOwnerMembership(admin, unitId, userId);
         await notifyUsers(admin, adminUser.id, new Set([userId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your dashboard.`).catch(() => {});
       } else {
         const { data: existing } = await admin.from("unit_tenant_assignments").select("id").eq("unit_id", unitId).maybeSingle();
         if (existing) return NextResponse.json({ error: "Unit already has a tenant. Release the current tenant first before assigning another." }, { status: 400 });
         const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: userId, is_payment_responsible: true });
         if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+        await replaceTenantMembership(admin, unitId, userId, true);
         await notifyUsers(admin, adminUser.id, new Set([userId]), "Unit assigned", `You have been assigned to ${unitName}. Log in to view your bills.`).catch(() => {});
       }
       await admin.from("user_site_assignments").delete().eq("user_id", userId);

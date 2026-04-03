@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { deleteTenantMembership, replaceTenantMembership, updateTenantPaymentFlag } from "@/lib/unit-memberships";
 
 function adminClient() {
   return createAdminClient(
@@ -10,17 +11,28 @@ function adminClient() {
   );
 }
 
+async function requireOwnerOfUnit(admin: ReturnType<typeof adminClient>, userId: string, unitId: string) {
+  const { data: mem } = await admin
+    .from("unit_memberships")
+    .select("id")
+    .eq("unit_id", unitId)
+    .eq("user_id", userId)
+    .eq("role", "owner")
+    .eq("status", "active")
+    .maybeSingle();
+  if (mem) return true;
+  const { data: legacy } = await admin.from("unit_owners").select("id").eq("unit_id", unitId).eq("owner_id", userId).maybeSingle();
+  return !!legacy;
+}
+
 async function requireOwnerUnit(unitId: string) {
   const sb = await createClient();
   const { data: { user } } = await sb.auth.getUser();
   if (!user) return { ok: false as const, status: 401, error: "Not authenticated" };
 
   const admin = adminClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
-  if (profile?.role !== "owner") return { ok: false as const, status: 403, error: "Owner only" };
-
-  const { data: ownership } = await admin.from("unit_owners").select("id").eq("unit_id", unitId).eq("owner_id", user.id).maybeSingle();
-  if (!ownership) return { ok: false as const, status: 403, error: "You do not own this unit" };
+  const ok = await requireOwnerOfUnit(admin, user.id, unitId);
+  if (!ok) return { ok: false as const, status: 403, error: "You do not own this unit" };
 
   return { ok: true as const, admin, user };
 }
@@ -45,9 +57,11 @@ export async function POST(request: Request) {
     if (currentTenantId && currentTenantId === tenantId) {
       const { error } = await admin.from("unit_tenant_assignments").update({ is_payment_responsible: resp }).eq("unit_id", unitId).eq("tenant_id", tenantId);
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      await updateTenantPaymentFlag(admin, unitId, tenantId, resp);
     } else {
       const { error } = await admin.from("unit_tenant_assignments").insert({ unit_id: unitId, tenant_id: tenantId, is_payment_responsible: resp });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      await replaceTenantMembership(admin, unitId, tenantId, resp);
     }
 
     return NextResponse.json({ success: true });
@@ -69,6 +83,7 @@ export async function DELETE(request: Request) {
 
     const { error } = await admin.from("unit_tenant_assignments").delete().eq("unit_id", unitId).eq("tenant_id", tenantId);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await deleteTenantMembership(admin, unitId, tenantId);
 
     return NextResponse.json({ success: true });
   } catch (err) {
@@ -88,6 +103,7 @@ export async function PATCH(request: Request) {
 
     const { error } = await admin.from("unit_tenant_assignments").update({ is_payment_responsible: isPaymentResponsible }).eq("unit_id", unitId).eq("tenant_id", tenantId);
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+    await updateTenantPaymentFlag(admin, unitId, tenantId, isPaymentResponsible);
 
     return NextResponse.json({ success: true });
   } catch (err) {

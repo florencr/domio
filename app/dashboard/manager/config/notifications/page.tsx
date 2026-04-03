@@ -10,6 +10,7 @@ import { useManagerData } from "../../context";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
+import { ManagerPollsPanel } from "./manager-polls-panel";
 
 type SentNotification = {
   id: string;
@@ -190,6 +191,8 @@ export default function ConfigNotificationsPage() {
           )}
         </CardContent>
       </Card>
+
+      <ManagerPollsPanel />
     </div>
   );
 }

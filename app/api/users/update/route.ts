@@ -16,7 +16,12 @@ export async function PATCH(request: Request) {
   try {
     const { userId, name, surname, phone, role } = await request.json();
     const sb = adminClient();
-    const { error } = await sb.from("profiles").update({ name, surname, phone: phone || null, role }).eq("id", userId);
+    const updates: Record<string, unknown> = { updated_at: new Date().toISOString() };
+    if (name !== undefined) updates.name = name;
+    if (surname !== undefined) updates.surname = surname;
+    if (phone !== undefined) updates.phone = phone || null;
+    if (role !== undefined) updates.role = role;
+    const { error } = await sb.from("profiles").update(updates).eq("id", userId);
     if (error) return NextResponse.json({ success: false, error: error.message }, { status: 400 });
     return NextResponse.json({ success: true });
   } catch (error) {

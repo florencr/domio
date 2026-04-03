@@ -93,8 +93,8 @@ export default function OwnerLedgerPage() {
             </div>
           </div>
         </div>
-        <div className="overflow-x-auto">
-        <table className="w-full min-w-full text-sm table-fixed">
+        <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+        <table className="w-full min-w-[48rem] text-sm table-fixed">
           <thead><tr className="border-b text-left">
             <SortableTh column="ref" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
             <SortableTh column="date" sortCol={ledgerSortCol} sortDir={ledgerSortDir} onSort={handleLedgerSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.period")}</SortableTh>

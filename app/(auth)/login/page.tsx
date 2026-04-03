@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getPostLoginDashboard } from "@/lib/dashboard-redirect";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -40,17 +41,7 @@ export default function LoginPage() {
       setError(err.message);
       return;
     }
-    let profile: { role?: string } | null = null;
-    try {
-      const apiRes = await fetch("/api/profile");
-      if (apiRes.ok) profile = await apiRes.json();
-    } catch {}
-    if (!profile) {
-      const res = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-      profile = res.data;
-    }
-    const role = profile?.role;
-    const dashboard = role === "admin" ? "/dashboard/admin" : role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+    const dashboard = await getPostLoginDashboard();
     setLoading(false);
     window.location.href = dashboard;
   }

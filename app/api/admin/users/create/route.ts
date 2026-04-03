@@ -41,7 +41,7 @@ export async function POST(request: Request) {
       name,
       surname,
       phone: phone || null,
-      role,
+      role: "resident",
     });
 
     if (profileError) {

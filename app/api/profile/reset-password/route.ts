@@ -15,7 +15,7 @@ export async function POST(request: Request) {
     );
     const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).single();
     const role = (profile as { role?: string } | null)?.role;
-    if (role !== "owner" && role !== "tenant" && role !== "manager") {
+    if (role !== "owner" && role !== "tenant" && role !== "resident" && role !== "manager" && role !== "admin") {
       return NextResponse.json({ error: "Not allowed" }, { status: 403 });
     }
 

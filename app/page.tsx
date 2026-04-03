@@ -11,10 +11,11 @@ import { Eye, EyeOff } from "lucide-react";
 import { OAuthButtons } from "@/components/OAuthButtons";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { getPostLoginDashboard } from "@/lib/dashboard-redirect";
 
 export default function HomePage() {
   const [user, setUser] = useState<{ id: string } | null>(null);
-  const [role, setRole] = useState<string | null>(null);
+  const [dashboardPath, setDashboardPath] = useState("/dashboard");
   const [loading, setLoading] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -39,19 +40,8 @@ export default function HomePage() {
           return;
         }
         setUser(session.user);
-        let role: string | null = null;
-        try {
-          const apiRes = await fetch("/api/profile");
-          if (apiRes.ok) {
-            const p = await apiRes.json();
-            role = p?.role ?? null;
-          }
-        } catch {}
-        if (role == null) {
-          const { data: profile } = await supabase.from("profiles").select("role").eq("id", session.user.id).single();
-          role = profile?.role ?? null;
-        }
-        setRole(role);
+        const dest = await getPostLoginDashboard();
+        setDashboardPath(dest);
         setLoading(false);
         done = true;
       })
@@ -71,24 +61,12 @@ export default function HomePage() {
       setLoginError(err.message);
       return;
     }
-    let profile: { role?: string } | null = null;
-    try {
-      const apiRes = await fetch("/api/profile");
-      if (apiRes.ok) profile = await apiRes.json();
-    } catch {}
-    if (!profile) {
-      const res = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
-      profile = res.data;
-    }
-    const r = profile?.role;
-    const dashboard = r === "admin" ? "/dashboard/admin" : r === "manager" ? "/dashboard/manager" : r === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
+    const dashboard = await getPostLoginDashboard();
     setLoginLoading(false);
     window.location.href = dashboard;
   }
 
   if (loading) return <div className="min-h-screen flex items-center justify-center"><p className="text-muted-foreground">Loading...</p></div>;
-
-  const dashboardHref = role === "admin" ? "/dashboard/admin" : role === "manager" ? "/dashboard/manager" : role === "tenant" ? "/dashboard/tenant" : "/dashboard/owner";
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 bg-muted/30">
@@ -99,7 +77,7 @@ export default function HomePage() {
         {user ? (
           <div className="flex flex-col gap-3 w-full">
             <Button asChild className="w-full">
-              <Link href={dashboardHref}>Dashboard</Link>
+              <Link href={dashboardPath}>Dashboard</Link>
             </Button>
             <form action="/api/auth/signout" method="post">
               <Button type="submit" variant="outline" className="w-full">

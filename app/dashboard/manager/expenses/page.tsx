@@ -293,8 +293,8 @@ export default function ManagerExpensesPage() {
             </div>
           </div>
           {msg.text && <p className={`text-xs ${msg.ok ? "text-green-600" : "text-amber-600"}`}>{msg.text}</p>}
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-full text-sm table-fixed">
+          <div className="w-full min-w-0 overflow-x-auto md:overflow-visible">
+            <table className="w-full min-w-[56rem] text-sm table-fixed">
               <thead>
                 <tr className="border-b text-left">
                   <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handleSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>

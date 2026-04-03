@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 export default function OwnerPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/dashboard/owner/billing");
+    router.replace("/dashboard/resident/billing");
   }, [router]);
   return (
     <div className="min-h-[200px] flex items-center justify-center">

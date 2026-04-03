@@ -1,10 +1,11 @@
 "use client";
 
 import { createContext, useContext, ReactNode, useState, useEffect, useCallback, useRef } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 export type OwnerData = {
   profile: { id: string; name: string; surname: string; email: string; role: string; phone?: string | null } | null;
+  ownerUnitIds: string[];
   siteNames: string[];
   sites: { id: string; name: string }[];
   units: { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance?: string | null; floor?: string | null }[];
@@ -13,6 +14,7 @@ export type OwnerData = {
   bills: { id: string; unit_id: string; period_month: number; period_year: number; total_amount: number; status: string; paid_at: string | null; receipt_url?: string | null; receipt_filename?: string | null; receipt_path?: string | null; reference_code?: string }[];
   expenses: { id: string; title: string; vendor: string; amount: number; period_month: number | null; period_year: number | null }[];
   unitTenantAssignments: { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
+  unitOwnerProfiles: { unit_id: string; id: string; name: string; surname: string; email: string }[];
   tenants: { id: string; name: string; surname: string; email: string }[];
 };
 
@@ -33,9 +35,11 @@ const OwnerDataContext = createContext<{
 
 export function OwnerDataProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const unitId = searchParams.get("unit");
   const [data, setData] = useState<OwnerData>({
-    profile: null, siteNames: [], sites: [], units: [], allUnits: [], buildings: [],
-    bills: [], expenses: [], unitTenantAssignments: [], tenants: [],
+    profile: null, ownerUnitIds: [], siteNames: [], sites: [], units: [], allUnits: [], buildings: [],
+    bills: [], expenses: [], unitTenantAssignments: [], unitOwnerProfiles: [], tenants: [],
   });
   const [loading, setLoading] = useState(true);
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -44,34 +48,48 @@ export function OwnerDataProvider({ children }: { children: ReactNode }) {
   const uploadTargetRef = useRef<UploadTarget>({});
 
   const load = useCallback(async () => {
-    const sb = createClient();
-    const { data: { user } } = await sb.auth.getUser();
-    if (!user) { router.push("/login"); return; }
+    try {
+      const sb = createClient();
+      const { data: { user } } = await sb.auth.getUser();
+      if (!user) {
+        setLoading(false);
+        router.replace("/login");
+        return;
+      }
 
-    const res = await fetch("/api/owner/data", { cache: "no-store" });
-    if (!res.ok) { setLoading(false); return; }
+      const q = unitId ? `?unitId=${encodeURIComponent(unitId)}` : "";
+      const res = await fetch(`/api/resident/data${q}`, { cache: "no-store" });
+      if (!res.ok) {
+        return;
+      }
 
-    const json = await res.json().catch(() => ({}));
-    let profile = json.profile ?? null;
-    if (!profile) {
-      const apiRes = await fetch("/api/profile");
-      if (apiRes.ok) profile = (await apiRes.json()) as OwnerData["profile"];
+      const json = await res.json().catch(() => ({}));
+      let profile = json.profile ?? null;
+      if (!profile) {
+        const apiRes = await fetch("/api/profile");
+        if (apiRes.ok) profile = (await apiRes.json()) as OwnerData["profile"];
+      }
+
+      setData({
+        profile: profile ?? null,
+        ownerUnitIds: json.ownerUnitIds ?? [],
+        siteNames: json.siteNames ?? [],
+        sites: json.sites ?? [],
+        units: json.units ?? [],
+        allUnits: json.allUnits ?? [],
+        buildings: json.buildings ?? [],
+        bills: json.bills ?? [],
+        expenses: json.expenses ?? [],
+        unitTenantAssignments: json.unitTenantAssignments ?? [],
+        unitOwnerProfiles: json.unitOwnerProfiles ?? [],
+        tenants: json.tenants ?? [],
+      });
+    } catch {
+      /* keep defaults; stop spinner */
+    } finally {
+      setLoading(false);
     }
-
-    setData({
-      profile: profile ?? null,
-      siteNames: json.siteNames ?? [],
-      sites: json.sites ?? [],
-      units: json.units ?? [],
-      allUnits: json.allUnits ?? [],
-      buildings: json.buildings ?? [],
-      bills: json.bills ?? [],
-      expenses: json.expenses ?? [],
-      unitTenantAssignments: json.unitTenantAssignments ?? [],
-      tenants: json.tenants ?? [],
-    });
-    setLoading(false);
-  }, [router]);
+  }, [router, unitId]);
 
   useEffect(() => { load(); }, [load]);
 

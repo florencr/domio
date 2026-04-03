@@ -17,6 +17,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { getPostLoginDashboard } from "@/lib/dashboard-redirect";
 
 export default function SignUpPage() {
   const [email, setEmail] = useState("");
@@ -50,7 +51,7 @@ export default function SignUpPage() {
         surname,
         phone: phone || null,
         email,
-        role: "owner",
+        role: "resident",
       });
       if (profileError) {
         setError(profileError.message);
@@ -59,7 +60,7 @@ export default function SignUpPage() {
       }
     }
     setLoading(false);
-    window.location.href = "/dashboard/owner";
+    window.location.href = await getPostLoginDashboard();
   }
 
   return (

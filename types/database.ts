@@ -2,7 +2,22 @@
  * Domio HOA – database types (match Supabase schema)
  */
 
-export type AppRole = "admin" | "manager" | "owner" | "tenant";
+export type AppRole = "admin" | "manager" | "owner" | "tenant" | "resident";
+
+export type UnitMembershipRole = "owner" | "tenant";
+
+export type UnitMembershipStatus = "active" | "pending" | "former";
+
+export interface UnitMembership {
+  id: string;
+  unit_id: string;
+  user_id: string;
+  role: UnitMembershipRole;
+  status: UnitMembershipStatus;
+  is_payment_responsible: boolean;
+  created_at: string;
+  updated_at: string;
+}
 
 export type UnitType = "apartment" | "villa" | "parking" | "garden" | "patio";
 
@@ -148,4 +163,62 @@ export interface BillWithLines extends Bill {
 
 export interface BillWithUnit extends Bill {
   unit?: Unit;
+}
+
+export type PollClassification = "informal_survey" | "formal_resolution";
+
+export type PollCategoryScope = "apartment" | "parking" | "garden" | "global";
+
+export type PollStatus = "draft" | "published" | "closed";
+
+export type PollQuestionKind = "single_select" | "multi_select";
+
+export interface Poll {
+  id: string;
+  site_id: string;
+  created_by: string;
+  title: string;
+  description: string | null;
+  classification: PollClassification;
+  category_scope: PollCategoryScope;
+  status: PollStatus;
+  attachment_path: string | null;
+  attachment_filename: string | null;
+  attachment_mime: string | null;
+  closes_at: string | null;
+  published_at: string | null;
+  threshold_percent: number;
+  threshold_question_id: string | null;
+  approval_option_id: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PollQuestion {
+  id: string;
+  poll_id: string;
+  sort_order: number;
+  prompt: string;
+  help_text: string | null;
+  kind: PollQuestionKind;
+  created_at: string;
+}
+
+export interface PollOption {
+  id: string;
+  question_id: string;
+  sort_order: number;
+  label: string;
+  explanation: string | null;
+  created_at: string;
+}
+
+export interface PollQuestionVote {
+  id: string;
+  poll_id: string;
+  question_id: string;
+  voter_user_id: string;
+  unit_id: string | null;
+  option_ids: string[];
+  created_at: string;
 }
