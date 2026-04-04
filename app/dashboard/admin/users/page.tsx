@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useAdminData } from "../context";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Search, Pencil, Building2, Home } from "lucide-react";
+import { Plus, Search, Pencil, Building2 } from "lucide-react";
 
 type UserRow = { id: string; name: string; surname: string; email: string; phone: string | null; role: string; site_id: string; site_name: string; units: string[] };
 
@@ -17,15 +17,13 @@ export default function AdminUsersPage() {
   const [userRoleFilter, setUserRoleFilter] = useState<string>("all");
   const [userSiteFilter, setUserSiteFilter] = useState<string>("all");
   const [showCreateUser, setShowCreateUser] = useState(false);
-  const [userForm, setUserForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+  const [userForm, setUserForm] = useState({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", residentSiteId: "", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
   const [editUser, setEditUser] = useState<UserRow | null>(null);
   const [editForm, setEditForm] = useState({ name: "", surname: "", email: "", phone: "", password: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
   const [assignManagerSite, setAssignManagerSite] = useState<UserRow | null>(null);
   const [assignManagerSiteId, setAssignManagerSiteId] = useState("");
-  const [assignUnitUser, setAssignUnitUser] = useState<UserRow | null>(null);
-  const [assignUnitId, setAssignUnitId] = useState("");
-  const [assignUnitAsRole, setAssignUnitAsRole] = useState<"owner" | "tenant">("owner");
-  const [unitsList, setUnitsList] = useState<{ id: string; unit_name: string; building_name: string; site_id: string | null }[]>([]);
+  const [assignResidentSiteUser, setAssignResidentSiteUser] = useState<UserRow | null>(null);
+  const [assignResidentSiteId, setAssignResidentSiteId] = useState("");
 
   const allRows: UserRow[] = [];
   usersBySite.forEach(({ site_id, site_name, manager, owners, tenants }) => {
@@ -47,12 +45,16 @@ export default function AdminUsersPage() {
   });
   const siteOptions = Array.from(new Map(allRows.map(r => [r.site_id, { id: r.site_id, name: r.site_name }])).values()).filter(x => x.id !== "__admin__");
   const assignableSites = sites.filter(s => s.id && s.id !== "__admin__" && s.id !== "__unassigned__");
-
-  useEffect(() => {
-    if (assignUnitUser) {
-      fetch("/api/admin/units").then(r => r.ok ? r.json() : []).then(data => setUnitsList(data ?? []));
+  const residentSiteOptions = (() => {
+    const m = new Map<string, { id: string; name: string }>();
+    assignableSites.forEach(s => m.set(s.id, { id: s.id, name: s.name }));
+    if (m.size === 0) {
+      usersBySite.forEach(({ site_id, site_name }) => {
+        if (site_id && site_id !== "__admin__" && site_id !== "__unassigned__" && site_name) m.set(site_id, { id: site_id, name: site_name });
+      });
     }
-  }, [assignUnitUser]);
+    return [...m.values()];
+  })();
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -72,22 +74,26 @@ export default function AdminUsersPage() {
       const json = await res.json();
       if (res.ok && json.success) {
         setMsg({ text: "Manager created.", ok: true });
-        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", residentSiteId: "", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
         setShowCreateUser(false);
         load();
       } else {
         setMsg({ text: json.error || "Failed", ok: false });
       }
     } else {
+      if (!userForm.residentSiteId) {
+        setMsg({ text: "Select a site for this user.", ok: false });
+        return;
+      }
       const res = await fetch("/api/admin/users/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: userForm.name, surname: userForm.surname, email: userForm.email, password: userForm.password, phone: userForm.phone, role: userForm.role }),
+        body: JSON.stringify({ name: userForm.name, surname: userForm.surname, email: userForm.email, password: userForm.password, phone: userForm.phone, role: userForm.role, siteId: userForm.residentSiteId }),
       });
       const json = await res.json();
       if (res.ok && json.success) {
-        setMsg({ text: "User created. Assign unit below.", ok: true });
-        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
+        setMsg({ text: "User created on site. The site manager can assign a unit from the manager dashboard.", ok: true });
+        setUserForm({ name: "", surname: "", email: "", password: "", phone: "", role: "resident", residentSiteId: "", siteName: "", siteAddress: "", vat_account: "", tax_amount: "", bank_name: "", iban: "", swift_code: "" });
         setShowCreateUser(false);
         load();
       } else {
@@ -165,19 +171,19 @@ export default function AdminUsersPage() {
     }
   }
 
-  async function submitAssignUnit() {
-    if (!assignUnitUser || !assignUnitId) return;
+  async function submitAssignResidentSite() {
+    if (!assignResidentSiteUser || !assignResidentSiteId) return;
     setMsg({ text: "", ok: true });
     const res = await fetch("/api/admin/assign-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId: assignUnitUser.id, unitId: assignUnitId, role: assignUnitAsRole }),
+      body: JSON.stringify({ userId: assignResidentSiteUser.id, siteId: assignResidentSiteId }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
-      setMsg({ text: "User assigned to unit.", ok: true });
-      setAssignUnitUser(null);
-      setAssignUnitId("");
+      setMsg({ text: "User linked to site.", ok: true });
+      setAssignResidentSiteUser(null);
+      setAssignResidentSiteId("");
       load();
     } else {
       setMsg({ text: json.error || "Failed", ok: false });
@@ -203,7 +209,7 @@ export default function AdminUsersPage() {
       <Card>
         <CardHeader>
           <CardTitle>Users</CardTitle>
-          <p className="text-sm text-muted-foreground">All users (managers, residents). Edit profile, assign site (managers) or unit (as owner or tenant of that unit).</p>
+          <p className="text-sm text-muted-foreground">All users (managers, residents). New residents are linked to a site here; unit assignment is done by each site&apos;s manager.</p>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
@@ -217,17 +223,39 @@ export default function AdminUsersPage() {
                 <p className="font-semibold mb-3">Create user</p>
                 <form onSubmit={createUser} className="grid gap-3">
                   <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                    <div><Label className="text-xs">Name</Label><Input value={userForm.name} onChange={e => setUserForm({ ...userForm, name: e.target.value })} required className="h-8" /></div>
-                    <div><Label className="text-xs">Surname</Label><Input value={userForm.surname} onChange={e => setUserForm({ ...userForm, surname: e.target.value })} required className="h-8" /></div>
-                    <div><Label className="text-xs">Email</Label><Input type="email" value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} required className="h-8" /></div>
-                    <div><Label className="text-xs">Password</Label><Input type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} required minLength={6} className="h-8" /></div>
-                    <div><Label className="text-xs">Phone</Label><Input value={userForm.phone} onChange={e => setUserForm({ ...userForm, phone: e.target.value })} className="h-8" placeholder="+355..." /></div>
                     <div><Label className="text-xs">Role</Label>
                       <Select value={userForm.role} onValueChange={v => setUserForm({ ...userForm, role: v })}>
                         <SelectTrigger className="h-8"><SelectValue /></SelectTrigger>
                         <SelectContent><SelectItem value="manager">Manager</SelectItem><SelectItem value="resident">Resident</SelectItem></SelectContent>
                       </Select>
                     </div>
+                  </div>
+                  {userForm.role !== "manager" && (
+                    <div className="rounded-md border-2 border-primary/30 bg-primary/5 p-3 space-y-2">
+                      <p className="text-sm font-semibold">1. Site for this resident (required)</p>
+                      <div>
+                        <Label className="text-xs">Site</Label>
+                        <Select value={userForm.residentSiteId || "__"} onValueChange={v => setUserForm({ ...userForm, residentSiteId: v === "__" ? "" : v })}>
+                          <SelectTrigger className="h-9 mt-1 w-full max-w-md"><SelectValue placeholder="Choose a site" /></SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="__">— Choose site —</SelectItem>
+                            {residentSiteOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {residentSiteOptions.length === 0 ? (
+                        <p className="text-xs text-amber-700 dark:text-amber-400">No sites found. Create a manager with a site (or add sites) first, then refresh this page.</p>
+                      ) : (
+                        <p className="text-xs text-muted-foreground">Pick the site before filling name and email. The manager assigns units to residents.</p>
+                      )}
+                    </div>
+                  )}
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <div><Label className="text-xs">Name</Label><Input value={userForm.name} onChange={e => setUserForm({ ...userForm, name: e.target.value })} required className="h-8" /></div>
+                    <div><Label className="text-xs">Surname</Label><Input value={userForm.surname} onChange={e => setUserForm({ ...userForm, surname: e.target.value })} required className="h-8" /></div>
+                    <div><Label className="text-xs">Email</Label><Input type="email" value={userForm.email} onChange={e => setUserForm({ ...userForm, email: e.target.value })} required className="h-8" /></div>
+                    <div><Label className="text-xs">Password</Label><Input type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} required minLength={6} className="h-8" /></div>
+                    <div className="md:col-span-2"><Label className="text-xs">Phone</Label><Input value={userForm.phone} onChange={e => setUserForm({ ...userForm, phone: e.target.value })} className="h-8" placeholder="+355..." /></div>
                   </div>
                   {userForm.role === "manager" && (
                     <>
@@ -243,7 +271,6 @@ export default function AdminUsersPage() {
                       </div>
                     </>
                   )}
-                  {userForm.role !== "manager" && <p className="text-xs text-muted-foreground">User will appear in Unassigned. Assign unit after creation.</p>}
                   <div className="flex gap-2">
                     <Button type="submit" size="sm">Create</Button>
                     <Button type="button" size="sm" variant="outline" onClick={() => setShowCreateUser(false)}>Cancel</Button>
@@ -283,6 +310,30 @@ export default function AdminUsersPage() {
                 </div>
               </div>
             )}
+            {assignResidentSiteUser && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => e.target === e.currentTarget && setAssignResidentSiteUser(null)}>
+                <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4 w-full" onClick={e => e.stopPropagation()}>
+                  <p className="font-semibold mb-1">Assign site — {assignResidentSiteUser.name} {assignResidentSiteUser.surname}</p>
+                  <p className="text-xs text-muted-foreground mb-3">Link this user to a site. Their manager assigns units.</p>
+                  <div className="flex flex-wrap gap-3 items-end mt-4">
+                    <div className="flex-1 min-w-[200px]">
+                      <Label className="text-xs">Site</Label>
+                      <Select value={assignResidentSiteId || "__"} onValueChange={v => setAssignResidentSiteId(v === "__" ? "" : v)}>
+                        <SelectTrigger className="w-full mt-1"><SelectValue placeholder="Select site" /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__">— Select —</SelectItem>
+                          {residentSiteOptions.map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={submitAssignResidentSite} disabled={!assignResidentSiteId}>Save</Button>
+                      <Button size="sm" variant="outline" onClick={() => setAssignResidentSiteUser(null)}>Cancel</Button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {assignManagerSite && (
               <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => e.target === e.currentTarget && setAssignManagerSite(null)}>
                 <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4 w-full" onClick={e => e.stopPropagation()}>
@@ -301,39 +352,6 @@ export default function AdminUsersPage() {
                     <div className="flex gap-2">
                       <Button size="sm" onClick={submitAssignManagerSite} disabled={!assignManagerSiteId}>Assign</Button>
                       <Button size="sm" variant="outline" onClick={() => setAssignManagerSite(null)}>Cancel</Button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-            {assignUnitUser && (
-              <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={e => e.target === e.currentTarget && setAssignUnitUser(null)}>
-                <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4 w-full" onClick={e => e.stopPropagation()}>
-                  <p className="font-semibold mb-1">Assign unit — {assignUnitUser.name} {assignUnitUser.surname} <span className="font-normal text-muted-foreground">(profile: {assignUnitUser.role})</span></p>
-                  <div className="flex flex-wrap gap-3 items-end mt-4">
-                    <div className="flex-1 min-w-[160px]">
-                      <Label className="text-xs">On unit as</Label>
-                      <Select value={assignUnitAsRole} onValueChange={v => setAssignUnitAsRole(v as "owner" | "tenant")}>
-                        <SelectTrigger className="w-full mt-1"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="owner">Unit owner</SelectItem>
-                          <SelectItem value="tenant">Unit tenant</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex-1 min-w-[200px]">
-                      <Label className="text-xs">Unit</Label>
-                      <Select value={assignUnitId || "__"} onValueChange={v => setAssignUnitId(v === "__" ? "" : v)}>
-                        <SelectTrigger className="w-full mt-1"><SelectValue placeholder="Select unit" /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="__">— Select —</SelectItem>
-                          {unitsList.map(u => <SelectItem key={u.id} value={u.id}>{u.building_name} – {u.unit_name}</SelectItem>)}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" onClick={submitAssignUnit} disabled={!assignUnitId}>Assign</Button>
-                      <Button size="sm" variant="outline" onClick={() => setAssignUnitUser(null)}>Cancel</Button>
                     </div>
                   </div>
                 </div>
@@ -392,7 +410,7 @@ export default function AdminUsersPage() {
                             <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignManagerSite(r); setAssignManagerSiteId(r.site_id !== "__unassigned__" ? r.site_id : ""); }} title="Assign site"><Building2 className="size-3.5 mr-0.5" />Assign site</Button>
                           )}
                           {(r.role === "resident" || r.role === "owner" || r.role === "tenant") && (
-                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignUnitUser(r); setAssignUnitId(""); setAssignUnitAsRole("owner"); }} title="Assign unit"><Home className="size-3.5 mr-0.5" />Assign unit</Button>
+                            <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => { setAssignResidentSiteUser(r); setAssignResidentSiteId(r.site_id && r.site_id !== "__unassigned__" ? r.site_id : ""); }} title="Assign site"><Building2 className="size-3.5 mr-0.5" />Assign site</Button>
                           )}
                           {(r.role === "manager" || r.role === "resident" || r.role === "owner" || r.role === "tenant") && (
                             <Button size="sm" variant="destructive" className="h-7 text-xs" onClick={() => deleteUnassignedUser(r.id)}>Delete</Button>

@@ -117,10 +117,13 @@ export default function ConfigUnitsPage() {
     } else setMsg({ text: error.message, ok: false });
   }
 
-  const ownerIds = new Set(data.unitOwners.map(o => o.owner_id));
-  const tenantIds = new Set(data.unitTenantAssignments.map(a => a.tenant_id));
-  const owners = data.profiles.filter(p => ownerIds.has(p.id));
-  const tenants = data.profiles.filter(p => tenantIds.has(p.id));
+  const assignableProfiles = data.profiles
+    .filter((p) => p.role !== "manager" && p.role !== "admin")
+    .sort((a, b) => `${a.surname} ${a.name}`.localeCompare(`${b.surname} ${b.name}`));
+  const ownersForCreate = assignableProfiles.filter((p) => p.id !== (f.tenantId !== "none" ? f.tenantId : ""));
+  const tenantsForCreate = assignableProfiles.filter((p) => p.id !== (f.ownerId !== "none" ? f.ownerId : ""));
+  const ownersForEdit = assignableProfiles.filter((p) => p.id !== (editF.tenantId !== "none" ? editF.tenantId : ""));
+  const tenantsForEdit = assignableProfiles.filter((p) => p.id !== (editF.ownerId !== "none" ? editF.ownerId : ""));
 
   return (
     <div className="space-y-4">
@@ -167,7 +170,7 @@ export default function ConfigUnitsPage() {
                 <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectOwner")} /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">{t(locale, "configUnits.noOwner")}</SelectItem>
-                  {owners.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
+                  {ownersForCreate.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -176,7 +179,7 @@ export default function ConfigUnitsPage() {
                 <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select tenant" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="none">— No tenant —</SelectItem>
-                  {tenants.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
+                  {tenantsForCreate.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
@@ -281,7 +284,7 @@ export default function ConfigUnitsPage() {
                     <SelectTrigger className="h-8 text-sm"><SelectValue placeholder={t(locale, "configUnits.selectOwner")} /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">{t(locale, "configUnits.noOwner")}</SelectItem>
-                      {owners.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
+                      {ownersForEdit.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>
@@ -290,7 +293,7 @@ export default function ConfigUnitsPage() {
                     <SelectTrigger className="h-8 text-sm"><SelectValue placeholder="Select tenant" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="none">— No tenant —</SelectItem>
-                      {tenants.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
+                      {tenantsForEdit.map(p => <SelectItem key={p.id} value={p.id}>{p.name} {p.surname} ({p.email})</SelectItem>)}
                     </SelectContent>
                   </Select>
                 </div>

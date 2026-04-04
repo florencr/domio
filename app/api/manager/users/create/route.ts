@@ -57,10 +57,11 @@ export async function POST(request: Request) {
       }
     }
 
-    const { error: assignError } = await admin.from("user_site_assignments").upsert(
-      { user_id: userId, site_id: site.id },
-      { onConflict: "user_id" }
-    );
+    await admin.from("user_site_assignments").delete().eq("user_id", userId);
+    const { error: assignError } = await admin.from("user_site_assignments").insert({
+      user_id: userId,
+      site_id: site.id,
+    });
 
     if (assignError) {
       return NextResponse.json({ success: false, error: assignError.message }, { status: 400 });

@@ -25,20 +25,23 @@ export async function POST(request: Request) {
     const { admin, user: adminUser } = r;
 
     const { userId, siteId, unitId, role } = await request.json();
-    if (!userId || !role) return NextResponse.json({ error: "userId and role required" }, { status: 400 });
-    if (role !== "owner" && role !== "tenant") return NextResponse.json({ error: "role must be owner or tenant" }, { status: 400 });
+    if (!userId) return NextResponse.json({ error: "userId required" }, { status: 400 });
 
     const { data: profile } = await admin.from("profiles").select("role").eq("id", userId).single();
     const pr = (profile as { role?: string } | null)?.role;
-    if (!profile || pr === "admin" || pr === "manager") return NextResponse.json({ error: "Invalid user for unit assignment" }, { status: 400 });
+    if (!profile || pr === "admin" || pr === "manager") return NextResponse.json({ error: "Invalid user for assignment" }, { status: 400 });
 
     if (siteId && !unitId) {
-      const { error } = await admin.from("user_site_assignments").upsert({ user_id: userId, site_id: siteId }, { onConflict: "user_id" });
+      await admin.from("user_site_assignments").delete().eq("user_id", userId);
+      const { error } = await admin.from("user_site_assignments").insert({ user_id: userId, site_id: siteId });
       if (error) return NextResponse.json({ error: error.message }, { status: 400 });
       return NextResponse.json({ success: true });
     }
 
     if (unitId) {
+      if (!role || (role !== "owner" && role !== "tenant")) {
+        return NextResponse.json({ error: "role must be owner or tenant when assigning a unit" }, { status: 400 });
+      }
       const { data: unit } = await admin.from("units").select("unit_name").eq("id", unitId).single();
       const unitName = (unit as { unit_name?: string } | null)?.unit_name ?? "your unit";
       if (role === "owner") {

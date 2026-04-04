@@ -53,7 +53,7 @@ export function AdminDataProvider({ children }: { children: ReactNode }) {
     if (p?.role !== "admin") { router.push("/dashboard"); return; }
 
     setProfile(p);
-    setSites((sitesRes ?? []) as Site[]);
+    setSites((Array.isArray(sitesRes) ? sitesRes : []) as Site[]);
     setManagers((managersRes ?? []) as Profile[]);
     setBuildings((buildingsRes ?? []) as Building[]);
     setUsersBySite((usersBySiteRes ?? []) as { site_id: string; site_name: string; manager: Profile | null; owners: (Profile & { units: string[] })[]; tenants: (Profile & { units: string[] })[] }[]);

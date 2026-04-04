@@ -5,6 +5,7 @@ DO $$ BEGIN
 EXCEPTION WHEN duplicate_object THEN NULL;
 END $$;
 
+
 DO $$ BEGIN
   CREATE TYPE poll_category_scope AS ENUM ('apartment', 'parking', 'garden', 'global');
 EXCEPTION WHEN duplicate_object THEN NULL;

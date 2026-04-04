@@ -77,7 +77,9 @@ export default function ConfigExpensesPage() {
     } else setMsg({ text: j.error || t(locale, "common.failed"), ok: false });
   }
 
-  const categories = [...new Set(data.expenses.map(e => e.category).filter(Boolean))].sort();
+  const categoryNamesFromConfig = data.serviceCategories.map((c) => c.name);
+  const categoryNamesFromExpenses = data.expenses.map((e) => e.category).filter(Boolean) as string[];
+  const categories = [...new Set([...categoryNamesFromConfig, ...categoryNamesFromExpenses, "Misc"])].sort((a, b) => a.localeCompare(b));
   const vendors = [...new Set(data.expenses.map(e => e.vendor).filter(Boolean))].sort();
 
   return (
