@@ -142,7 +142,7 @@ export default function OwnerPaymentsPage() {
             </div>
           </div>
           <div className="overflow-x-auto">
-            <table className="w-full min-w-full text-sm table-fixed">
+            <table className="w-full min-w-[760px] text-sm table-auto">
               <thead><tr className="border-b text-left">
                 <SortableTh column="ref" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.reference")}</SortableTh>
                 <SortableTh column="paidOn" sortCol={sortCol} sortDir={sortDir} onSort={handlePaidSort} className="pb-3 pr-4 font-medium text-muted-foreground">{t(locale, "table.paidOn")}</SortableTh>
