@@ -61,6 +61,17 @@ export async function POST(request: Request) {
     });
     if (prodErr) return NextResponse.json({ error: prodErr.message }, { status: 400 });
 
+    const { error: commErr } = await admin.from("energy_meters").insert({
+      building_id: bid,
+      installation_id: installationId,
+      unit_id: null,
+      meter_role: "community",
+      label: "Community meter (building ↔ grid)",
+      external_device_id:
+        typeof body.community_meter_id === "string" ? body.community_meter_id.trim() || null : null,
+    });
+    if (commErr) return NextResponse.json({ error: commErr.message }, { status: 400 });
+
     await logAudit({
       user_id: user.id,
       user_email: user.email ?? undefined,

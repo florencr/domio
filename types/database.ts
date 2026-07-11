@@ -226,7 +226,7 @@ export interface PollQuestionVote {
 
 export type EnergyInstallationStatus = "active" | "inactive" | "pending";
 
-export type EnergyMeterRole = "production" | "consumption";
+export type EnergyMeterRole = "production" | "consumption" | "community";
 
 export type EnergyReadingSource = "api" | "manual" | "import";
 
@@ -294,6 +294,12 @@ export interface EnergyPeriod {
   total_production_kwh: number | null;
   total_consumption_kwh: number | null;
   surplus_kwh: number | null;
+  grid_import_kwh: number | null;
+  grid_export_kwh: number | null;
+  expected_grid_import_kwh: number | null;
+  expected_grid_export_kwh: number | null;
+  reconciliation_delta_kwh: number | null;
+  reconciliation_ok: boolean | null;
   closed_at: string | null;
   settled_at: string | null;
   created_at: string;
@@ -305,8 +311,29 @@ export interface EnergyAllocation {
   period_id: string;
   unit_id: string;
   share_percent: number;
+  kwh_meter_consumption: number | null;
+  kwh_from_solar: number | null;
+  kwh_from_grid: number | null;
+  kwh_supplier_net: number | null;
   kwh_allocated: number;
   credit_amount_eur: number;
+  applied_bill_id: string | null;
+  created_at: string;
+}
+
+export interface EnergyWalletLedger {
+  id: string;
+  building_id: string;
+  unit_id: string;
+  period_id: string | null;
+  period_month: number;
+  period_year: number;
+  kwh_meter_total: number;
+  kwh_from_solar: number;
+  kwh_from_grid: number;
+  credit_earned_eur: number;
+  credit_applied_eur: number;
+  wallet_balance_eur: number;
   applied_bill_id: string | null;
   created_at: string;
 }

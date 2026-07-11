@@ -9,14 +9,6 @@ export async function POST(request: Request) {
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin, buildingId: bid } = r;
 
-    const unitId = typeof body.unit_id === "string" ? body.unit_id : "";
-    if (!unitId) return NextResponse.json({ error: "unit_id required" }, { status: 400 });
-
-    const { data: unit } = await admin.from("units").select("id, building_id").eq("id", unitId).maybeSingle();
-    if (!unit || (unit as { building_id: string }).building_id !== bid) {
-      return NextResponse.json({ error: "Unit not in this building" }, { status: 400 });
-    }
-
     const { data: installation } = await admin
       .from("energy_installations")
       .select("id")
@@ -24,6 +16,49 @@ export async function POST(request: Request) {
       .maybeSingle();
     if (!installation) {
       return NextResponse.json({ error: "Create installation first" }, { status: 400 });
+    }
+
+    if (body.meter_role === "community") {
+      const { data: existing } = await admin
+        .from("energy_meters")
+        .select("id")
+        .eq("building_id", bid)
+        .eq("meter_role", "community")
+        .maybeSingle();
+      if (existing) {
+        return NextResponse.json({ error: "Community meter already exists" }, { status: 400 });
+      }
+
+      const label =
+        typeof body.label === "string" && body.label.trim()
+          ? body.label.trim()
+          : "Community meter (building ↔ grid)";
+      const externalDeviceId =
+        typeof body.external_device_id === "string" ? body.external_device_id.trim() || null : null;
+
+      const { data: row, error } = await admin
+        .from("energy_meters")
+        .insert({
+          building_id: bid,
+          installation_id: (installation as { id: string }).id,
+          unit_id: null,
+          meter_role: "community",
+          label,
+          external_device_id: externalDeviceId,
+        })
+        .select("*")
+        .single();
+
+      if (error) return NextResponse.json({ error: error.message }, { status: 400 });
+      return NextResponse.json({ meter: row });
+    }
+
+    const unitId = typeof body.unit_id === "string" ? body.unit_id : "";
+    if (!unitId) return NextResponse.json({ error: "unit_id required" }, { status: 400 });
+
+    const { data: unit } = await admin.from("units").select("id, building_id").eq("id", unitId).maybeSingle();
+    if (!unit || (unit as { building_id: string }).building_id !== bid) {
+      return NextResponse.json({ error: "Unit not in this building" }, { status: 400 });
     }
 
     const label =

@@ -10,7 +10,7 @@ import {
 
 type MeterRow = {
   id: string;
-  meter_role: "production" | "consumption";
+  meter_role: "production" | "consumption" | "community";
   unit_id: string | null;
   label: string;
 };
@@ -33,6 +33,8 @@ export type SettlementLoadResult =
       shares: SettlementShare[];
       meters: MeterRow[];
       missingMeterIds: string[];
+      hasCommunityMeter: boolean;
+      communityReadingMissing: boolean;
     }
   | { ok: false; error: string };
 
@@ -40,7 +42,8 @@ export async function loadSettlementInputs(
   admin: SupabaseClient,
   buildingId: string,
   periodMonth: number,
-  periodYear: number
+  periodYear: number,
+  options?: { requireCommunityMeter?: boolean }
 ): Promise<SettlementLoadResult> {
   const { data: installation } = await admin
     .from("energy_installations")
@@ -59,6 +62,9 @@ export async function loadSettlementInputs(
   const meterList = meters as MeterRow[];
   const production = meterList.filter(m => m.meter_role === "production");
   if (!production.length) return { ok: false, error: "Production meter is missing" };
+
+  const communityMeters = meterList.filter(m => m.meter_role === "community");
+  const hasCommunityMeter = communityMeters.length > 0;
 
   const meterIds = meterList.map(m => m.id);
   const { data: readingRows, error: rErr } = await admin
@@ -92,6 +98,13 @@ export async function loadSettlementInputs(
     });
   }
 
+  const communityReadingMissing =
+    hasCommunityMeter && communityMeters.some(m => missingMeterIds.includes(m.id));
+
+  if (options?.requireCommunityMeter && !hasCommunityMeter) {
+    return { ok: false, error: "Community meter (building ↔ grid) is missing" };
+  }
+
   const { data: shareRows, error: sErr } = await admin
     .from("energy_unit_shares")
     .select("unit_id,share_percent")
@@ -109,15 +122,28 @@ export async function loadSettlementInputs(
     return { ok: false, error: e instanceof Error ? e.message : "Invalid shares" };
   }
 
-  if (missingMeterIds.length) {
+  const requiredMissing = missingMeterIds.filter(id => {
+    const m = meterList.find(x => x.id === id);
+    return m?.meter_role !== "community";
+  });
+
+  if (requiredMissing.length) {
     const labels = meterList
-      .filter(m => missingMeterIds.includes(m.id))
+      .filter(m => requiredMissing.includes(m.id))
       .map(m => m.label)
       .join(", ");
     return { ok: false, error: `Missing readings for meters: ${labels}` };
   }
 
-  return { ok: true, readings, shares, meters: meterList, missingMeterIds: [] };
+  return {
+    ok: true,
+    readings,
+    shares,
+    meters: meterList,
+    missingMeterIds,
+    hasCommunityMeter,
+    communityReadingMissing,
+  };
 }
 
 export function previewSettlement(
@@ -133,6 +159,23 @@ export type PersistSettlementResult = {
   periodId: string;
   settlement: NetBillingSettlement;
 };
+
+async function loadWalletBalance(
+  admin: SupabaseClient,
+  buildingId: string,
+  unitId: string
+): Promise<number> {
+  const { data } = await admin
+    .from("energy_wallet_ledger")
+    .select("wallet_balance_eur")
+    .eq("building_id", buildingId)
+    .eq("unit_id", unitId)
+    .order("period_year", { ascending: false })
+    .order("period_month", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data ? Number((data as { wallet_balance_eur: number }).wallet_balance_eur) : 0;
+}
 
 export async function persistSettlement(
   admin: SupabaseClient,
@@ -173,6 +216,12 @@ export async function persistSettlement(
     total_production_kwh: settlement.totalProductionKwh,
     total_consumption_kwh: settlement.totalConsumptionKwh,
     surplus_kwh: settlement.surplusKwh,
+    grid_import_kwh: settlement.gridImportKwh,
+    grid_export_kwh: settlement.gridExportKwh,
+    expected_grid_import_kwh: settlement.expectedGridImportKwh,
+    expected_grid_export_kwh: settlement.expectedGridExportKwh,
+    reconciliation_delta_kwh: settlement.reconciliationDeltaKwh,
+    reconciliation_ok: settlement.reconciliationOk,
     closed_at: now,
     settled_at: now,
     updated_at: now,
@@ -186,6 +235,11 @@ export async function persistSettlement(
     if (upErr) throw new Error(upErr.message);
     const { error: delErr } = await admin.from("energy_allocations").delete().eq("period_id", periodId);
     if (delErr) throw new Error(delErr.message);
+    const { error: delWalletErr } = await admin
+      .from("energy_wallet_ledger")
+      .delete()
+      .eq("period_id", periodId);
+    if (delWalletErr) throw new Error(delWalletErr.message);
   } else {
     const { data: inserted, error: insErr } = await admin
       .from("energy_periods")
@@ -200,6 +254,10 @@ export async function persistSettlement(
     period_id: periodId,
     unit_id: a.unitId,
     share_percent: a.sharePercent,
+    kwh_meter_consumption: a.kwhMeterConsumption,
+    kwh_from_solar: a.kwhFromSolar,
+    kwh_from_grid: a.kwhFromGrid,
+    kwh_supplier_net: a.kwhSupplierNet,
     kwh_allocated: a.kwhAllocated,
     credit_amount_eur: a.creditAmountEur,
     applied_bill_id: null,
@@ -207,6 +265,32 @@ export async function persistSettlement(
 
   const { error: allocErr } = await admin.from("energy_allocations").insert(allocationRows);
   if (allocErr) throw new Error(allocErr.message);
+
+  const walletRows = [];
+  for (const a of settlement.allocations) {
+    const prevBalance = await loadWalletBalance(admin, buildingId, a.unitId);
+    const earned = a.creditAmountEur;
+    const balanceAfter = Math.round((prevBalance + earned) * 100) / 100;
+    walletRows.push({
+      building_id: buildingId,
+      unit_id: a.unitId,
+      period_id: periodId,
+      period_month: periodMonth,
+      period_year: periodYear,
+      kwh_meter_total: a.kwhMeterConsumption,
+      kwh_from_solar: a.kwhFromSolar,
+      kwh_from_grid: a.kwhFromGrid,
+      credit_earned_eur: earned,
+      credit_applied_eur: 0,
+      wallet_balance_eur: balanceAfter,
+      applied_bill_id: null,
+    });
+  }
+
+  if (walletRows.length) {
+    const { error: walletErr } = await admin.from("energy_wallet_ledger").insert(walletRows);
+    if (walletErr) throw new Error(walletErr.message);
+  }
 
   return { periodId, settlement };
 }

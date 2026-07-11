@@ -92,10 +92,53 @@ export async function markEnergyCreditApplied(
   allocationId: string,
   billId: string
 ): Promise<void> {
+  const { data: allocation, error: fetchErr } = await admin
+    .from("energy_allocations")
+    .select("id, period_id, unit_id, credit_amount_eur")
+    .eq("id", allocationId)
+    .maybeSingle();
+  if (fetchErr) throw new Error(fetchErr.message);
+
   const { error } = await admin
     .from("energy_allocations")
     .update({ applied_bill_id: billId })
     .eq("id", allocationId)
     .is("applied_bill_id", null);
   if (error) throw new Error(error.message);
+
+  if (allocation) {
+    const row = allocation as {
+      period_id: string;
+      unit_id: string;
+      credit_amount_eur: number;
+    };
+    const appliedEur = Number(row.credit_amount_eur);
+    const { data: period } = await admin
+      .from("energy_periods")
+      .select("building_id, period_month, period_year")
+      .eq("id", row.period_id)
+      .maybeSingle();
+    if (period && appliedEur > 0) {
+      const p = period as { building_id: string; period_month: number; period_year: number };
+      const { data: ledger } = await admin
+        .from("energy_wallet_ledger")
+        .select("id, wallet_balance_eur")
+        .eq("building_id", p.building_id)
+        .eq("unit_id", row.unit_id)
+        .eq("period_month", p.period_month)
+        .eq("period_year", p.period_year)
+        .maybeSingle();
+      if (ledger) {
+        const balance = Math.round((Number((ledger as { wallet_balance_eur: number }).wallet_balance_eur) - appliedEur) * 100) / 100;
+        await admin
+          .from("energy_wallet_ledger")
+          .update({
+            credit_applied_eur: appliedEur,
+            wallet_balance_eur: balance,
+            applied_bill_id: billId,
+          })
+          .eq("id", (ledger as { id: string }).id);
+      }
+    }
+  }
 }

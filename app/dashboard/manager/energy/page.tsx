@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useManagerData } from "../context";
 import { useLocale } from "@/lib/locale-context";
@@ -21,11 +22,22 @@ import type {
 type NetBillingSettlement = {
   totalProductionKwh: number;
   totalConsumptionKwh: number;
+  gridImportKwh: number;
+  gridExportKwh: number;
+  expectedGridImportKwh: number;
+  expectedGridExportKwh: number;
+  totalSupplierNetKwh: number;
+  reconciliationDeltaKwh: number;
+  reconciliationOk: boolean;
   surplusKwh: number;
   gridTariffEurPerKwh: number;
   allocations: {
     unitId: string;
     sharePercent: number;
+    kwhMeterConsumption: number;
+    kwhFromSolar: number;
+    kwhFromGrid: number;
+    kwhSupplierNet: number;
     kwhAllocated: number;
     creditAmountEur: number;
   }[];
@@ -162,6 +174,11 @@ export default function ManagerEnergyPage() {
 
   const productionMeter = useMemo(
     () => (energy?.meters ?? []).find(m => m.meter_role === "production"),
+    [energy?.meters]
+  );
+
+  const communityMeter = useMemo(
+    () => (energy?.meters ?? []).find(m => m.meter_role === "community"),
     [energy?.meters]
   );
 
@@ -385,6 +402,11 @@ export default function ManagerEnergyPage() {
       <div>
         <h2 className="text-lg font-semibold">{t(locale, "energy.title")}</h2>
         <p className="text-sm text-muted-foreground">{t(locale, "energy.subtitle")}</p>
+        <p className="text-sm mt-1">
+          <Link href="/dashboard/manager/energy/reconciliation" className="underline text-primary">
+            {t(locale, "energyReconciliation.openReconciliation")}
+          </Link>
+        </p>
       </div>
 
       {msg.text && (
@@ -512,6 +534,13 @@ export default function ManagerEnergyPage() {
                     {productionMeter.external_device_id ? ` (${productionMeter.external_device_id})` : ""}
                   </p>
                 )}
+                {communityMeter && (
+                  <p className="text-sm">
+                    <span className="font-medium">{t(locale, "energyReconciliation.communityMeter")}:</span>{" "}
+                    {communityMeter.label}
+                    {communityMeter.external_device_id ? ` (${communityMeter.external_device_id})` : ""}
+                  </p>
+                )}
 
                 <p className="text-sm font-medium">{t(locale, "energy.consumptionMeters")}</p>
                 {consumptionMeters.length === 0 && (
@@ -603,7 +632,9 @@ export default function ManagerEnergyPage() {
                         <p className="w-full text-sm font-medium">
                           {m.meter_role === "production"
                             ? t(locale, "energy.productionMeter")
-                            : unitLabel(m.unit_id!)}
+                            : m.meter_role === "community"
+                              ? t(locale, "energyReconciliation.communityMeter")
+                              : unitLabel(m.unit_id!)}
                         </p>
                         <div>
                           <Label>{t(locale, "energy.kwhImport")}</Label>

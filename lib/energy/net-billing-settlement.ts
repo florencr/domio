@@ -1,10 +1,15 @@
 /**
- * Net Billing settlement: building surplus kWh split by custom unit %, converted to € credit.
+ * Net Billing / virtual sharing settlement: solar split by custom unit %, reconciled with community meter.
  */
+
+import {
+  computeVirtualSharingSettlement,
+  type VirtualSharingReading,
+} from "@/lib/energy/virtual-sharing-settlement";
 
 export type SettlementReading = {
   meterId: string;
-  meterRole: "production" | "consumption";
+  meterRole: "production" | "consumption" | "community";
   unitId: string | null;
   kwhImport: number;
   kwhExport: number;
@@ -18,6 +23,10 @@ export type SettlementShare = {
 export type SettlementAllocation = {
   unitId: string;
   sharePercent: number;
+  kwhMeterConsumption: number;
+  kwhFromSolar: number;
+  kwhFromGrid: number;
+  kwhSupplierNet: number;
   kwhAllocated: number;
   creditAmountEur: number;
 };
@@ -25,77 +34,40 @@ export type SettlementAllocation = {
 export type NetBillingSettlement = {
   totalProductionKwh: number;
   totalConsumptionKwh: number;
+  gridImportKwh: number;
+  gridExportKwh: number;
+  expectedGridImportKwh: number;
+  expectedGridExportKwh: number;
+  totalSupplierNetKwh: number;
+  reconciliationDeltaKwh: number;
+  reconciliationOk: boolean;
   surplusKwh: number;
   gridTariffEurPerKwh: number;
   allocations: SettlementAllocation[];
   totalCreditEur: number;
 };
 
-function round3(n: number): number {
-  return Math.round(n * 1000) / 1000;
-}
-
 function round2(n: number): number {
   return Math.round(n * 100) / 100;
 }
 
 /** Solar production for the period: prefer kWh export on the production meter. */
-export function productionKwhFromReading(reading: SettlementReading): number {
+export function productionKwhFromReading(reading: SettlementReading | VirtualSharingReading): number {
   if (reading.meterRole !== "production") return 0;
   if (reading.kwhExport > 0) return reading.kwhExport;
   return reading.kwhImport;
 }
 
 /**
- * Net Billing surplus: solar produced minus building self-consumption (never negative).
- * Each unit receives surplus × (custom share % / 100) as kWh, then × grid tariff as € credit.
+ * Virtual sharing: total solar × custom % per unit; grid per unit = meter − solar share.
+ * Reconciles community meter import/export with expected building net.
  */
 export function computeNetBillingSettlement(
   readings: SettlementReading[],
   shares: SettlementShare[],
   gridTariffEurPerKwh: number
 ): NetBillingSettlement {
-  const tariff = Number(gridTariffEurPerKwh);
-  if (!Number.isFinite(tariff) || tariff <= 0) {
-    throw new Error("grid_tariff_eur_per_kwh must be a positive number");
-  }
-
-  const totalProductionKwh = round3(
-    readings
-      .filter(r => r.meterRole === "production")
-      .reduce((sum, r) => sum + productionKwhFromReading(r), 0)
-  );
-
-  const totalConsumptionKwh = round3(
-    readings
-      .filter(r => r.meterRole === "consumption")
-      .reduce((sum, r) => sum + Math.max(0, r.kwhImport), 0)
-  );
-
-  const surplusKwh = round3(Math.max(0, totalProductionKwh - totalConsumptionKwh));
-
-  const allocations: SettlementAllocation[] = shares.map(s => {
-    const pct = Number(s.sharePercent);
-    const kwhAllocated = round3(surplusKwh * (pct / 100));
-    const creditAmountEur = round2(kwhAllocated * tariff);
-    return {
-      unitId: s.unitId,
-      sharePercent: pct,
-      kwhAllocated,
-      creditAmountEur,
-    };
-  });
-
-  const totalCreditEur = round2(allocations.reduce((sum, a) => sum + a.creditAmountEur, 0));
-
-  return {
-    totalProductionKwh,
-    totalConsumptionKwh,
-    surplusKwh,
-    gridTariffEurPerKwh: tariff,
-    allocations,
-    totalCreditEur,
-  };
+  return computeVirtualSharingSettlement(readings, shares, gridTariffEurPerKwh);
 }
 
 export function validateSharesTotal(shares: SettlementShare[]): void {
