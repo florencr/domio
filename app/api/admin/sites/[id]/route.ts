@@ -26,14 +26,18 @@ export async function PATCH(
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin, user } = r;
     const { id } = await context.params;
-    const { name, address } = await request.json();
+    const body = await request.json();
+    const { name, address, energy_addon_enabled } = body;
 
-    const updates: { name?: string; address?: string } = {};
+    const updates: { name?: string; address?: string; energy_addon_enabled?: boolean } = {};
     if (name !== undefined) updates.name = name.trim();
     if (address !== undefined) updates.address = address.trim();
+    if (energy_addon_enabled !== undefined) {
+      updates.energy_addon_enabled = energy_addon_enabled === true;
+    }
 
     if (Object.keys(updates).length === 0) {
-      return NextResponse.json({ error: "name or address required" }, { status: 400 });
+      return NextResponse.json({ error: "No valid fields to update" }, { status: 400 });
     }
 
     const updateResult = await admin.from("sites").update(updates).eq("id", id);

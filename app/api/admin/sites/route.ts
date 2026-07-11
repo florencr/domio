@@ -22,12 +22,15 @@ export async function GET() {
     const r = await requireAdmin();
     if (!r.ok) return NextResponse.json({ error: r.error }, { status: r.status });
     const { admin } = r;
-    const fullSelect = "id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,created_at";
+    const fullSelect = "id,name,address,vat_account,bank_name,iban,swift_code,tax_amount,manager_id,energy_addon_enabled,created_at";
     const result = await admin.from("sites").select(fullSelect).order("created_at", { ascending: false });
     if (result.error && (result.error.message?.includes("column") || result.error.message?.includes("schema"))) {
-      const minimalResult = await admin.from("sites").select("id,name,address,manager_id,created_at").order("created_at", { ascending: false });
+      const fallbackSelect = "id,name,address,manager_id,created_at";
+      const minimalResult = await admin.from("sites").select(fallbackSelect).order("created_at", { ascending: false });
       if (minimalResult.error) return NextResponse.json({ error: minimalResult.error.message }, { status: 500 });
-      return NextResponse.json(minimalResult.data ?? []);
+      return NextResponse.json(
+        (minimalResult.data ?? []).map((s: Record<string, unknown>) => ({ ...s, energy_addon_enabled: false }))
+      );
     }
     if (result.error) return NextResponse.json({ error: result.error.message }, { status: 500 });
     return NextResponse.json(result.data ?? []);

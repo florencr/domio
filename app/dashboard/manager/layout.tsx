@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, Zap } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -20,6 +20,7 @@ const NAV_KEYS = [
   { href: "/dashboard/manager/expenses", key: "nav.manager.expenses", icon: Wallet },
   { href: "/dashboard/manager/payments", key: "nav.manager.payments", icon: CreditCard },
   { href: "/dashboard/manager/ledger", key: "nav.manager.ledger", icon: BookOpen },
+  { href: "/dashboard/manager/energy", key: "nav.manager.energy", icon: Zap },
   { href: "/dashboard/manager/config", key: "nav.manager.config", icon: Settings },
 ];
 
@@ -44,6 +45,10 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   const { profile, bills, expenses } = data;
+  const navItems = NAV_KEYS.filter(
+    item => item.href !== "/dashboard/manager/energy" || data.site?.energy_addon_enabled === true
+  );
+  const mobileNavCols = navItems.length <= 5 ? "grid-cols-5" : "grid-cols-6";
   const collected = bills.filter(b => b.paid_at).reduce((s, b) => s + Math.abs(Number(b.total_amount)), 0);
   const outstanding = bills.filter(b => !b.paid_at).reduce((s, b) => s + Math.abs(Number(b.total_amount)), 0);
   const expenseRecords = expenses.filter(e => e.period_month != null);
@@ -129,8 +134,8 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
 
       <nav className="flex flex-wrap gap-1 mb-6">
-        {NAV_KEYS.map(({ href, key, icon: Icon }) => {
-          const isActive = pathname === href || (href === "/dashboard/manager/config" && pathname?.startsWith("/dashboard/manager/config"));
+        {navItems.map(({ href, key, icon: Icon }) => {
+          const isActive = pathname === href || (href === "/dashboard/manager/config" && pathname?.startsWith("/dashboard/manager/config")) || (href === "/dashboard/manager/energy" && pathname?.startsWith("/dashboard/manager/energy"));
           return (
             <Link key={href} href={href}>
               <Button
@@ -151,9 +156,9 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
-        <nav className="grid grid-cols-5 gap-1 h-12 min-h-[48px] p-1.5 rounded-lg">
-          {NAV_KEYS.map(({ href, key, icon: Icon }) => {
-            const isActive = pathname === href || (href === "/dashboard/manager/config" && pathname?.startsWith("/dashboard/manager/config"));
+        <nav className={`grid ${mobileNavCols} gap-1 h-12 min-h-[48px] p-1.5 rounded-lg`}>
+          {navItems.map(({ href, key, icon: Icon }) => {
+            const isActive = pathname === href || (href === "/dashboard/manager/config" && pathname?.startsWith("/dashboard/manager/config")) || (href === "/dashboard/manager/energy" && pathname?.startsWith("/dashboard/manager/energy"));
             return (
               <Link key={href} href={href} className={`flex flex-col items-center justify-center gap-0.5 text-xs font-semibold rounded-md ${isActive ? "bg-muted" : ""}`}>
                 <Icon className="size-4" />

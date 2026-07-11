@@ -21,7 +21,7 @@ export function ManagerDataProvider({ children }: { children: ReactNode }) {
 
     const results = await Promise.all([
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url").eq("id", user.id).single(),
-      sb.from("sites").select("id,name,address").eq("manager_id", user.id).maybeSingle(),
+      sb.from("sites").select("id,name,address,energy_addon_enabled").eq("manager_id", user.id).maybeSingle(),
       fetch("/api/manager/buildings").then(r => r.ok ? r.json() : []),
       sb.from("units").select("id,unit_name,type,size_m2,building_id,entrance,floor"),
       sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category,site_id"),

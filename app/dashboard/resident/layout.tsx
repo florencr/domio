@@ -6,7 +6,7 @@ import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LogOut, User, FileText, AlertTriangle, Home, BookOpen, Bell, CreditCard, SlidersHorizontal } from "lucide-react";
+import { LogOut, User, FileText, AlertTriangle, Home, BookOpen, Bell, CreditCard, SlidersHorizontal, Zap } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -19,6 +19,7 @@ const NAV_KEYS = [
   { href: "/dashboard/resident/billing", key: "nav.owner.billing", icon: FileText },
   { href: "/dashboard/resident/payments", key: "nav.owner.payments", icon: CreditCard },
   { href: "/dashboard/resident/ledger", key: "nav.owner.ledger", icon: BookOpen },
+  { href: "/dashboard/resident/energy", key: "nav.owner.energy", icon: Zap },
   { href: "/dashboard/resident/notifications", key: "nav.owner.notifications", icon: Bell },
 ];
 
@@ -45,6 +46,10 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
   }
 
   const { profile, units, bills, expenses } = data;
+  const navItems = NAV_KEYS.filter(
+    item => item.href !== "/dashboard/resident/energy" || data.energyAddonEnabled === true
+  );
+  const mobileNavCols = navItems.length <= 5 ? "grid-cols-5" : "grid-cols-6";
   const unitIdSet = new Set(units.map(u => u.id));
   const myBills = bills.filter(b => unitIdSet.has(b.unit_id));
   const collected = myBills.filter(b => b.paid_at).reduce((s, b) => s + Math.abs(Number(b.total_amount)), 0);
@@ -138,7 +143,7 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="flex flex-wrap gap-1 mb-6">
-          {NAV_KEYS.map(({ href, key, icon: Icon }) => {
+          {navItems.map(({ href, key, icon: Icon }) => {
             const isActive = pathname === href;
             return (
               <Link key={href} href={withUnit(href)}>
@@ -160,8 +165,8 @@ function OwnerLayoutInner({ children }: { children: React.ReactNode }) {
         </div>
 
         <div className="fixed bottom-0 left-0 right-0 z-20 md:hidden bg-muted/90 border-t px-4 pt-1.5 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <nav className="grid grid-cols-5 gap-1 h-12 min-h-[48px] p-1.5 rounded-lg">
-            {NAV_KEYS.map(({ href, key, icon: Icon }) => {
+          <nav className={`grid ${mobileNavCols} gap-1 h-12 min-h-[48px] p-1.5 rounded-lg`}>
+            {navItems.map(({ href, key, icon: Icon }) => {
               const isActive = pathname === href;
               return (
               <Link key={href} href={withUnit(href)} className={`flex flex-col items-center justify-center gap-0.5 text-xs font-semibold rounded-md ${isActive ? "bg-muted" : ""}`}>

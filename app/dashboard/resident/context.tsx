@@ -8,6 +8,7 @@ export type OwnerData = {
   ownerUnitIds: string[];
   siteNames: string[];
   sites: { id: string; name: string }[];
+  energyAddonEnabled: boolean;
   units: { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance?: string | null; floor?: string | null }[];
   allUnits: { id: string; unit_name: string }[];
   buildings: { id: string; name: string; site_id?: string | null }[];
@@ -38,7 +39,7 @@ export function OwnerDataProvider({ children }: { children: ReactNode }) {
   const searchParams = useSearchParams();
   const unitId = searchParams.get("unit");
   const [data, setData] = useState<OwnerData>({
-    profile: null, ownerUnitIds: [], siteNames: [], sites: [], units: [], allUnits: [], buildings: [],
+    profile: null, ownerUnitIds: [], siteNames: [], sites: [], energyAddonEnabled: false, units: [], allUnits: [], buildings: [],
     bills: [], expenses: [], unitTenantAssignments: [], unitOwnerProfiles: [], tenants: [],
   });
   const [loading, setLoading] = useState(true);
@@ -75,6 +76,7 @@ export function OwnerDataProvider({ children }: { children: ReactNode }) {
         ownerUnitIds: json.ownerUnitIds ?? [],
         siteNames: json.siteNames ?? [],
         sites: json.sites ?? [],
+        energyAddonEnabled: json.energyAddonEnabled === true,
         units: json.units ?? [],
         allUnits: json.allUnits ?? [],
         buildings: json.buildings ?? [],

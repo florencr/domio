@@ -4,6 +4,13 @@ import { NextResponse } from "next/server";
 import { logAudit } from "@/lib/audit";
 import { notifyUsers } from "@/lib/notify-users";
 import { t } from "@/lib/i18n";
+import {
+  energyCreditBillLineDescription,
+  energyCreditLineAmount,
+  loadPendingEnergyCreditsForBillMonth,
+  markEnergyCreditApplied,
+} from "@/lib/energy/apply-pending-credits";
+import { isSiteEnergyAddonEnabled } from "@/lib/energy/site-addon";
 
 async function requireManager() {
   const sb = await createClient();
@@ -75,8 +82,15 @@ export async function POST(request: Request) {
     const { data: services } = await admin.from("services").select("id, name, unit_type, pricing_model, price_value, frequency").or(`site_id.eq.${siteId},site_id.is.null`);
     const recurrentServices = (services ?? []).filter((s: { frequency: string }) => s.frequency === "recurrent") as { id: string; name: string; unit_type: string; pricing_model: string; price_value: number }[];
 
+    const unitIdsToProcess = toProcess.map(u => u.id);
+    const energyAddonOn = await isSiteEnergyAddonEnabled(admin, siteId);
+    const pendingEnergyCredits = energyAddonOn
+      ? await loadPendingEnergyCreditsForBillMonth(admin, unitIdsToProcess, m, y)
+      : new Map();
+
     const rows: { unit_id: string; period_month: number; period_year: number; total_amount: number; status: string }[] = [];
     const linesByUnit = new Map<string, { line_type: string; reference_id: string | null; description: string; amount: number }[]>();
+    const energyCreditByUnit = new Map<string, string>();
 
     for (const unit of toProcess) {
       const lines: { line_type: string; reference_id: string | null; description: string; amount: number }[] = [];
@@ -91,6 +105,21 @@ export async function POST(request: Request) {
         total += amount;
       }
 
+      const energyCredit = pendingEnergyCredits.get(unit.id);
+      if (energyCredit) {
+        const creditAmount = energyCreditLineAmount(energyCredit.creditAmountEur);
+        if (creditAmount < 0) {
+          lines.push({
+            line_type: "energy_credit",
+            reference_id: energyCredit.allocationId,
+            description: energyCreditBillLineDescription(energyCredit),
+            amount: creditAmount,
+          });
+          total += creditAmount;
+          energyCreditByUnit.set(unit.id, energyCredit.allocationId);
+        }
+      }
+
       total = Math.round(total * 100) / 100;
       rows.push({ unit_id: unit.id, period_month: m, period_year: y, total_amount: total, status: "draft" });
       linesByUnit.set(unit.id, lines);
@@ -100,6 +129,7 @@ export async function POST(request: Request) {
     if (error) return NextResponse.json({ error: error.message }, { status: 400 });
 
     const insertedBills = (inserted ?? []) as { id: string; unit_id: string }[];
+    let energyCreditsApplied = 0;
     for (const bill of insertedBills) {
       const lines = linesByUnit.get(bill.unit_id) ?? [];
       for (const line of lines) {
@@ -112,6 +142,11 @@ export async function POST(request: Request) {
         });
         if (lineErr) return NextResponse.json({ error: "Bill line: " + lineErr.message }, { status: 400 });
       }
+      const allocationId = energyCreditByUnit.get(bill.unit_id);
+      if (allocationId) {
+        await markEnergyCreditApplied(admin, allocationId, bill.id);
+        energyCreditsApplied += 1;
+      }
     }
 
     await logAudit({
@@ -121,7 +156,7 @@ export async function POST(request: Request) {
       entity_type: "bill",
       entity_label: `${m}/${y} – ${insertedBills.length} bills`,
       site_id: siteId,
-      new_values: { period_month: m, period_year: y, count: insertedBills.length },
+      new_values: { period_month: m, period_year: y, count: insertedBills.length, energy_credits_applied: energyCreditsApplied },
     });
 
     const unitIds = [...new Set(insertedBills.map(b => b.unit_id))];
@@ -155,7 +190,7 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ success: true, count: insertedBills.length });
+    return NextResponse.json({ success: true, count: insertedBills.length, energyCreditsApplied });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }

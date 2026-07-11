@@ -19,7 +19,7 @@ export default function AdminSitesPage() {
   const [showCreateSite, setShowCreateSite] = useState(false);
   const [siteForm, setSiteForm] = useState({ managerId: "", name: "", address: "" });
   const [editingSiteId, setEditingSiteId] = useState<string | null>(null);
-  const [siteEditForm, setSiteEditForm] = useState({ name: "", address: "" });
+  const [siteEditForm, setSiteEditForm] = useState({ name: "", address: "", energy_addon_enabled: false });
   const [filterManagerId, setFilterManagerId] = useState<string>("all");
 
   const managerMap = new Map(managers.map(m => [m.id, m]));
@@ -35,7 +35,7 @@ export default function AdminSitesPage() {
       const s = sites.find(x => x.id === editParam);
       if (s) {
         setEditingSiteId(editParam);
-        setSiteEditForm({ name: s.name, address: s.address || "" });
+        setSiteEditForm({ name: s.name, address: s.address || "", energy_addon_enabled: s.energy_addon_enabled === true });
       }
     }
   }, [searchParams, sites]);
@@ -73,12 +73,32 @@ export default function AdminSitesPage() {
       body: JSON.stringify({
         name: siteEditForm.name,
         address: siteEditForm.address,
+        energy_addon_enabled: siteEditForm.energy_addon_enabled,
       }),
     });
     const json = await res.json();
     if (res.ok && json.success) {
       setMsg({ text: "Site updated.", ok: true });
       setEditingSiteId(null);
+      load();
+    } else {
+      setMsg({ text: json.error || "Failed", ok: false });
+    }
+  }
+
+  async function toggleEnergyAddon(siteId: string, enabled: boolean) {
+    setMsg({ text: "", ok: true });
+    const res = await fetch(`/api/admin/sites/${siteId}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ energy_addon_enabled: enabled }),
+    });
+    const json = await res.json();
+    if (res.ok && json.success) {
+      setMsg({
+        text: enabled ? t(locale, "admin.energyAddonEnabled") : t(locale, "admin.energyAddonDisabled"),
+        ok: true,
+      });
       load();
     } else {
       setMsg({ text: json.error || "Failed", ok: false });
@@ -120,6 +140,16 @@ export default function AdminSitesPage() {
               <p className="text-sm font-medium">{t(locale, "admin.editSite")}</p>
               <div><Label>{t(locale, "admin.siteName")}</Label><Input value={siteEditForm.name} onChange={e => setSiteEditForm({ ...siteEditForm, name: e.target.value })} required /></div>
               <div><Label>{t(locale, "admin.address")}</Label><Input value={siteEditForm.address} onChange={e => setSiteEditForm({ ...siteEditForm, address: e.target.value })} placeholder="e.g. 123 Main St" /></div>
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="edit-energy-addon"
+                  checked={siteEditForm.energy_addon_enabled}
+                  onChange={e => setSiteEditForm({ ...siteEditForm, energy_addon_enabled: e.target.checked })}
+                  className="h-4 w-4"
+                />
+                <Label htmlFor="edit-energy-addon">{t(locale, "admin.energyAddonLabel")}</Label>
+              </div>
               <div className="flex gap-2">
                 <Button type="submit">{t(locale, "common.save")}</Button>
                 <Button type="button" variant="outline" onClick={() => setEditingSiteId(null)}>{t(locale, "common.cancel")}</Button>
@@ -145,6 +175,7 @@ export default function AdminSitesPage() {
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.name")}</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.address")}</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.manager")}</th>
+                  <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "admin.energyAddon")}</th>
                   <th className="px-4 py-3 text-left font-medium text-muted-foreground">{t(locale, "common.action")}</th>
                 </tr>
               </thead>
@@ -157,7 +188,20 @@ export default function AdminSitesPage() {
                       <td className="px-4 py-3 text-muted-foreground">{s.address || "—"}</td>
                       <td className="px-4 py-3 text-muted-foreground">{m ? `${m.name} ${m.surname}` : "—"}</td>
                       <td className="px-4 py-3">
-                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => { setShowCreateSite(false); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "" }); }}>
+                        <label className="flex items-center gap-2 cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={s.energy_addon_enabled === true}
+                            onChange={e => toggleEnergyAddon(s.id, e.target.checked)}
+                            className="h-4 w-4"
+                          />
+                          <span className="text-xs text-muted-foreground">
+                            {s.energy_addon_enabled ? t(locale, "admin.energyAddonOn") : t(locale, "admin.energyAddonOff")}
+                          </span>
+                        </label>
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button variant="outline" size="sm" className="h-8 gap-1" onClick={() => { setShowCreateSite(false); setEditingSiteId(s.id); setSiteEditForm({ name: s.name, address: s.address || "", energy_addon_enabled: s.energy_addon_enabled === true }); }}>
                           <Pencil className="size-3.5" />{t(locale, "common.edit")}
                         </Button>
                       </td>

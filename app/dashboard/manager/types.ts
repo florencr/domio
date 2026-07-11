@@ -1,6 +1,6 @@
 export type Profile = { id: string; name: string; surname: string; email: string; role: string; phone?: string | null; avatar_url?: string | null };
 export type Building = { id: string; name: string; site_id?: string | null };
-export type Site = { id: string; name: string; address?: string };
+export type Site = { id: string; name: string; address?: string; energy_addon_enabled?: boolean };
 export type Unit = { id: string; unit_name: string; type: string; size_m2: number | null; building_id: string; entrance: string | null; floor: string | null };
 export type Service = { id: string; name: string; unit_type: string; pricing_model: string; price_value: number; frequency: string; category?: string | null; site_id?: string | null };
 export type Expense = { id: string; title: string; category: string; vendor: string; amount: number; frequency: string; created_at?: string | null; paid_at?: string | null; period_month?: number | null; period_year?: number | null; template_id?: string | null; reference_code?: string | null; site_id?: string | null };

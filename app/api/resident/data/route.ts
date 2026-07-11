@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { anySiteEnergyAddonEnabled } from "@/lib/energy/site-addon";
 
 function adminClient() {
   return createAdminClient(
@@ -104,8 +105,9 @@ export async function GET(request: Request) {
       ]);
       const allUnits = (await admin.from("units").select("id, unit_name")).data ?? [];
       const asnSiteIds = [...new Set((asnRes.data ?? []).map((a: { site_id: string }) => a.site_id).filter(Boolean))];
-      const { data: asnSites } = asnSiteIds.length ? await admin.from("sites").select("id, name").in("id", asnSiteIds) : { data: [] };
+      const { data: asnSites } = asnSiteIds.length ? await admin.from("sites").select("id, name, energy_addon_enabled").in("id", asnSiteIds) : { data: [] };
       const siteNamesEmpty = ((asnSites ?? []) as { name: string }[]).map((s) => s.name);
+      const energyAddonEmpty = await anySiteEnergyAddonEnabled(admin, asnSiteIds);
       const siteUserIds = new Set<string>();
       if (asnSiteIds.length) {
         const { data: siteUsers } = await admin.from("user_site_assignments").select("user_id").in("site_id", asnSiteIds);
@@ -127,6 +129,7 @@ export async function GET(request: Request) {
         tenants: tenantCandidates ?? [],
         siteNames: siteNamesEmpty,
         sites: asnSites ?? [],
+        energyAddonEnabled: energyAddonEmpty,
       };
       if (debug) body._debug = { userId: user.id, allUnitIds: [], billsCount: 0 };
       return NextResponse.json(body);
@@ -151,8 +154,9 @@ export async function GET(request: Request) {
       const { data: asn } = await admin.from("user_site_assignments").select("site_id").eq("user_id", user.id);
       siteIds = [...new Set((asn ?? []).map((a: { site_id: string }) => a.site_id).filter(Boolean))];
     }
-    const { data: sitesData } = siteIds.length ? await admin.from("sites").select("id, name").in("id", siteIds) : { data: [] };
+    const { data: sitesData } = siteIds.length ? await admin.from("sites").select("id, name, energy_addon_enabled").in("id", siteIds) : { data: [] };
     const siteNames = ((sitesData ?? []) as { name: string }[]).map((s) => s.name);
+    const energyAddonEnabled = await anySiteEnergyAddonEnabled(admin, siteIds);
 
     const assignments = (assignmentsRes.data ?? []) as { unit_id: string; tenant_id: string; is_payment_responsible?: boolean }[];
     const unitPayerMap = new Map<string, string>();
@@ -210,6 +214,7 @@ export async function GET(request: Request) {
       tenants: tenantCandidates ?? [],
       siteNames,
       sites: sitesData ?? [],
+      energyAddonEnabled,
     };
     if (debug) {
       body._debug = {
