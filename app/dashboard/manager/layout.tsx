@@ -6,7 +6,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, Zap } from "lucide-react";
+import { LogOut, Settings, User, FileText, Wallet, CreditCard, BookOpen, Zap, SlidersHorizontal } from "lucide-react";
 import { NotificationBell } from "@/components/NotificationBell";
 import { DomioLogo } from "@/components/DomioLogo";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@/components/ui/dropdown-menu";
@@ -66,6 +66,11 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
           </Link>
         </div>
         <div className="flex items-center gap-2">
+          <Link href="/dashboard/manager/preferences">
+            <Button variant="ghost" size="icon" title={t(locale, "common.preferences")}>
+              <SlidersHorizontal className="size-5" />
+            </Button>
+          </Link>
           <NotificationBell
             isManager
             onSendClick={() => setShowSendNotif(true)}
@@ -91,6 +96,12 @@ function ManagerLayoutInner({ children }: { children: React.ReactNode }) {
                 <DropdownMenuItem className="gap-2 cursor-pointer">
                   <User className="size-4" />
                   {t(locale, "nav.config.account")}
+                </DropdownMenuItem>
+              </Link>
+              <Link href="/dashboard/manager/preferences">
+                <DropdownMenuItem className="gap-2 cursor-pointer">
+                  <SlidersHorizontal className="size-4" />
+                  {t(locale, "common.preferences")}
                 </DropdownMenuItem>
               </Link>
               <DropdownMenuItem onClick={signOut} className="gap-2 cursor-pointer">

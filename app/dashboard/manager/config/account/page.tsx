@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useLocale } from "@/lib/locale-context";
 import { t } from "@/lib/i18n";
+import { LanguagePreferenceSelect } from "@/components/LanguagePreferenceSelect";
 
 type AccountData = {
   id: string;
@@ -118,6 +119,12 @@ export default function ConfigAccountPage() {
           {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-600"}`}>{msg.text}</p>}
 
           <form onSubmit={saveProfile} className="space-y-6">
+            <div>
+              <h3 className="text-sm font-semibold mb-3">{t(locale, "preferences.language")}</h3>
+              <p className="text-xs text-muted-foreground mb-2">{t(locale, "preferences.languageDescription")}</p>
+              <LanguagePreferenceSelect />
+            </div>
+
             <div>
               <h3 className="text-sm font-semibold mb-3">{t(locale, "managerAccount.contactDetails")}</h3>
               <div className="grid gap-3 max-w-md">

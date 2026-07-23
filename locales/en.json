@@ -431,7 +431,16 @@
     "importSkipped": "Skipped: {rows}",
     "importWarnings": "Warnings: {rows}",
     "csvHelp": "Paste from Excel (tabs OK) or CSV. Required: building, unit_name, type. Owners matched by email, phone, or name — new owners are created automatically.",
-    "csvPlaceholder": "Paste CSV here (include header row)…"
+    "csvPlaceholder": "Paste CSV here (include header row)…",
+    "searchUnits": "Search",
+    "searchPlaceholder": "Unit, building, owner, type…",
+    "allTypes": "All types",
+    "filtered": "filtered",
+    "showingRange": "Showing {from}–{to} of {total}",
+    "pageOf": "Page {page} / {total}",
+    "prevPage": "Previous",
+    "nextPage": "Next",
+    "noUnitsOnPage": "No units on this page."
   },
   "configUnitTypes": {
     "unitTypes": "Unit Types",

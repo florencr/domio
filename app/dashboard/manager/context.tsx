@@ -23,7 +23,7 @@ export function ManagerDataProvider({ children }: { children: ReactNode }) {
       sb.from("profiles").select("id,name,surname,email,role,phone,avatar_url").eq("id", user.id).single(),
       sb.from("sites").select("id,name,address,energy_addon_enabled").eq("manager_id", user.id).maybeSingle(),
       fetch("/api/manager/buildings").then(r => r.ok ? r.json() : []),
-      sb.from("units").select("id,unit_name,type,size_m2,building_id,entrance,floor"),
+      fetch("/api/manager/units", { cache: "no-store" }).then(r => r.ok ? r.json() : []),
       sb.from("services").select("id,name,unit_type,pricing_model,price_value,frequency,category,site_id"),
       fetch("/api/manager/expenses", { cache: "no-store" }).then(async r => { if (!r.ok) return []; const j = await r.json(); return Array.isArray(j) ? j : []; }),
       fetch("/api/manager/users").then(r => r.ok ? r.json() : []),
@@ -44,7 +44,7 @@ export function ManagerDataProvider({ children }: { children: ReactNode }) {
     const site = (results[1].data ?? null) as ManagerData["site"];
     const siteId = site?.id ?? null;
     const buildingsData = (results[2] ?? []) as ManagerData["buildings"];
-    const allUnits = (results[3].data ?? []) as ManagerData["units"];
+    const allUnits = (Array.isArray(results[3]) ? results[3] : []) as ManagerData["units"];
     const allServices = (results[4].data ?? []) as ManagerData["services"];
     const allExpenses = (Array.isArray(results[5]) ? results[5] : []) as ManagerData["expenses"];
     const allUnitTypes = (results[7] ?? []) as ManagerData["unitTypes"];

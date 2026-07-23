@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +19,10 @@ export default function ConfigUnitsPage() {
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [editF, setEditF] = useState({ buildingId: "", name: "", type: "", size: "", entrance: "", floor: "", ownerId: "none", tenantId: "none" });
   const [filterBuilding, setFilterBuilding] = useState("all");
+  const [filterType, setFilterType] = useState("all");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const PAGE_SIZE = 25;
   const [csvText, setCsvText] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -31,9 +35,45 @@ export default function ConfigUnitsPage() {
   const tenantMap = new Map(data.unitTenantAssignments.map(a => [a.unit_id, a.tenant_id]));
   const profileMap = new Map(data.profiles.map(p => [p.id, p]));
 
-  const filteredUnits = filterBuilding === "all"
-    ? data.units
-    : data.units.filter(u => u.building_id === filterBuilding);
+  const unitTypeOptions = useMemo(() => {
+    const names = new Set<string>();
+    data.unitTypes.forEach((ut) => names.add(ut.name));
+    data.units.forEach((u) => { if (u.type) names.add(u.type); });
+    return [...names].sort((a, b) => a.localeCompare(b));
+  }, [data.unitTypes, data.units]);
+
+  const filteredUnits = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return data.units.filter((u) => {
+      if (filterBuilding !== "all" && u.building_id !== filterBuilding) return false;
+      if (filterType !== "all" && u.type !== filterType) return false;
+      if (!q) return true;
+      const building = (buildingMap.get(u.building_id) ?? "").toLowerCase();
+      const ownerId = ownerMap.get(u.id);
+      const owner = ownerId ? profileMap.get(ownerId) : null;
+      const ownerText = owner ? `${owner.name} ${owner.surname}`.toLowerCase() : "";
+      return (
+        u.unit_name.toLowerCase().includes(q) ||
+        building.includes(q) ||
+        u.type.toLowerCase().includes(q) ||
+        ownerText.includes(q)
+      );
+    });
+  }, [data.units, filterBuilding, filterType, searchQuery, buildingMap, ownerMap, profileMap]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUnits.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = filteredUnits.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1;
+  const pageEnd = Math.min(safePage * PAGE_SIZE, filteredUnits.length);
+  const paginatedUnits = filteredUnits.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  useEffect(() => {
+    setPage(1);
+  }, [filterBuilding, filterType, searchQuery]);
+
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   async function create(e: React.FormEvent) {
     e.preventDefault();
@@ -201,15 +241,13 @@ export default function ConfigUnitsPage() {
       {msg.text && <p className={`text-sm ${msg.ok ? "text-green-600" : "text-red-500"}`}>{msg.text}</p>}
 
       <div className="flex items-center justify-between flex-wrap gap-2">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold">{t(locale, "configUnits.units")} ({filteredUnits.length})</h3>
-          <Select value={filterBuilding} onValueChange={setFilterBuilding}>
-            <SelectTrigger className="h-7 w-44 text-xs"><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">{t(locale, "configUnits.allBuildings")}</SelectItem>
-              {data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
-            </SelectContent>
-          </Select>
+        <div className="flex flex-wrap items-center gap-2">
+          <h3 className="text-sm font-semibold">
+            {t(locale, "configUnits.units")} ({data.units.length})
+            {filteredUnits.length !== data.units.length && (
+              <span className="text-muted-foreground font-normal"> · {filteredUnits.length} {t(locale, "configUnits.filtered")}</span>
+            )}
+          </h3>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting}>
@@ -221,6 +259,38 @@ export default function ConfigUnitsPage() {
           <Button size="sm" onClick={() => { setShowCreate(!showCreate); setEditingUnit(null); }}>
             {showCreate ? t(locale, "common.cancel") : t(locale, "configUnits.addUnit")}
           </Button>
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-end gap-2 p-3 border rounded-lg bg-muted/20">
+        <div className="flex-1 min-w-[160px]">
+          <Label className="text-xs">{t(locale, "configUnits.searchUnits")}</Label>
+          <Input
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder={t(locale, "configUnits.searchPlaceholder")}
+            className="h-8 text-sm mt-1"
+          />
+        </div>
+        <div>
+          <Label className="text-xs">{t(locale, "configUnits.building")}</Label>
+          <Select value={filterBuilding} onValueChange={setFilterBuilding}>
+            <SelectTrigger className="h-8 w-40 text-xs mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t(locale, "configUnits.allBuildings")}</SelectItem>
+              {data.buildings.map(b => <SelectItem key={b.id} value={b.id}>{b.name}</SelectItem>)}
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs">{t(locale, "configUnits.unitType")}</Label>
+          <Select value={filterType} onValueChange={setFilterType}>
+            <SelectTrigger className="h-8 w-40 text-xs mt-1"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">{t(locale, "configUnits.allTypes")}</SelectItem>
+              {unitTypeOptions.map(name => <SelectItem key={name} value={name}>{name}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -305,7 +375,7 @@ export default function ConfigUnitsPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
-              {filteredUnits.map(u => {
+              {paginatedUnits.map(u => {
                 const ownerId = ownerMap.get(u.id);
                 const owner = ownerId ? profileMap.get(ownerId) : null;
                 const tenantId = tenantMap.get(u.id);
@@ -348,11 +418,27 @@ export default function ConfigUnitsPage() {
                   </tr>
                 );
               })}
-              {!filteredUnits.length && (
-                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">{t(locale, "configUnits.noUnitsYet")}</td></tr>
+              {!paginatedUnits.length && (
+                <tr><td colSpan={9} className="px-4 py-8 text-center text-muted-foreground">{filteredUnits.length ? t(locale, "configUnits.noUnitsOnPage") : t(locale, "configUnits.noUnitsYet")}</td></tr>
               )}
             </tbody>
           </table>
+          {filteredUnits.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 border-t bg-muted/20 text-sm">
+              <p className="text-muted-foreground">
+                {t(locale, "configUnits.showingRange", { from: String(pageStart), to: String(pageEnd), total: String(filteredUnits.length) })}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button size="sm" variant="outline" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)}>
+                  {t(locale, "configUnits.prevPage")}
+                </Button>
+                <span className="text-xs text-muted-foreground">{t(locale, "configUnits.pageOf", { page: String(safePage), total: String(totalPages) })}</span>
+                <Button size="sm" variant="outline" disabled={safePage >= totalPages} onClick={() => setPage(safePage + 1)}>
+                  {t(locale, "configUnits.nextPage")}
+                </Button>
+              </div>
+            </div>
+          )}
         </div>
 
         {editingUnit && (

@@ -430,7 +430,16 @@
     "importSkipped": "U kaluan: {rows}",
     "importWarnings": "Paralajmërime: {rows}",
     "csvHelp": "Ngjit nga Excel (tab OK) ose CSV. Të detyrueshme: building, unit_name, type. Pronarët lidhen me email, telefon ose emër — llogari të reja krijohen automatikisht.",
-    "csvPlaceholder": "Ngjit CSV këtu (përfshi rreshtin e titullit)…"
+    "csvPlaceholder": "Ngjit CSV këtu (përfshi rreshtin e titullit)…",
+    "searchUnits": "Kërko",
+    "searchPlaceholder": "Njësi, ndërtesë, pronar, lloj…",
+    "allTypes": "Të gjitha llojet",
+    "filtered": "të filtruara",
+    "showingRange": "Duke shfaqur {from}–{to} nga {total}",
+    "pageOf": "Faqja {page} / {total}",
+    "prevPage": "Mbrapa",
+    "nextPage": "Para",
+    "noUnitsOnPage": "Nuk ka njësi në këtë faqe."
   },
   "configUnitTypes": {
     "unitTypes": "Llojet e Njësive",
