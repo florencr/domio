@@ -142,20 +142,26 @@ export default function ConfigUnitsPage() {
       });
       const json = await res.json();
       if (!res.ok) {
-        setMsg({ text: json.error || t(locale, "configUnits.importFailed"), ok: false });
+        let err = json.error || t(locale, "configUnits.importFailed");
+        if (json.skipped?.length) err += " — " + json.skipped.slice(0, 3).join("; ");
+        setMsg({ text: err, ok: false });
         return;
       }
       let text = t(locale, "configUnits.importDone", {
         created: String(json.created ?? 0),
         updated: String(json.updated ?? 0),
       });
+      if (json.ownersCreated) text += ` (${json.ownersCreated} owners created)`;
+      if (json.buildingsCreated) text += ` (${json.buildingsCreated} buildings created)`;
       if (json.skipped?.length) {
         text += " " + t(locale, "configUnits.importSkipped", { rows: json.skipped.slice(0, 5).join("; ") });
-      }
-      if (json.warnings?.length) {
+        setMsg({ text, ok: false });
+      } else if (json.warnings?.length) {
         text += " " + t(locale, "configUnits.importWarnings", { rows: json.warnings.slice(0, 3).join("; ") });
+        setMsg({ text, ok: true });
+      } else {
+        setMsg({ text, ok: true });
       }
-      setMsg({ text, ok: true });
       setCsvText("");
       load();
     } catch {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireManagerSite } from "@/lib/polls/require-manager-site";
 import { parseUnitsCsv } from "@/lib/units/csv";
-import { findOrCreateSiteOwner } from "@/lib/units/resolve-profile";
+import { findOrCreateSiteOwner, loadProfileImportContext } from "@/lib/units/resolve-profile";
 import { replaceOwnerMembership, replaceTenantMembership } from "@/lib/unit-memberships";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -49,6 +49,35 @@ async function assignTenant(admin: SupabaseClient, unitId: string, tenantId: str
   }
 }
 
+function normBuildingName(name: string) {
+  return name.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+async function ensureBuilding(
+  admin: SupabaseClient,
+  siteId: string,
+  buildingName: string,
+  buildingByName: Map<string, string>
+): Promise<string | null> {
+  const key = normBuildingName(buildingName);
+  const existing = buildingByName.get(key);
+  if (existing) return existing;
+
+  const { data: site } = await admin.from("sites").select("address").eq("id", siteId).maybeSingle();
+  const address = ((site as { address?: string } | null)?.address ?? buildingName.trim()) || buildingName.trim();
+
+  const { data: inserted, error } = await admin
+    .from("buildings")
+    .insert({ name: buildingName.trim(), site_id: siteId, address })
+    .select("id")
+    .single();
+
+  if (error || !inserted) return null;
+  const id = (inserted as { id: string }).id;
+  buildingByName.set(key, id);
+  return id;
+}
+
 export async function POST(request: Request) {
   try {
     const r = await requireManagerSite();
@@ -65,20 +94,22 @@ export async function POST(request: Request) {
     } catch (e) {
       return NextResponse.json({ error: e instanceof Error ? e.message : "Invalid CSV" }, { status: 400 });
     }
-    if (!parsed.length) return NextResponse.json({ error: "No data rows in CSV" }, { status: 400 });
+    if (!parsed.length) {
+      return NextResponse.json({ error: "No data rows in CSV. Check building, unit_name and type columns." }, { status: 400 });
+    }
+
+    const profileCtx = await loadProfileImportContext(admin, siteId);
+    const ownerCache = new Map<string, string>();
 
     const { data: buildings } = await admin.from("buildings").select("id,name").eq("site_id", siteId);
     const buildingByName = new Map<string, string>();
     for (const b of buildings ?? []) {
-      buildingByName.set((b as { name: string }).name.trim().toLowerCase(), (b as { id: string }).id);
+      buildingByName.set(normBuildingName((b as { name: string }).name), (b as { id: string }).id);
     }
 
-    const buildingIds = (buildings ?? []).map((b: { id: string }) => b.id);
+    const buildingIds = [...buildingByName.values()];
     const { data: existingUnits } = buildingIds.length
-      ? await admin
-          .from("units")
-          .select("id,unit_name,building_id")
-          .in("building_id", buildingIds)
+      ? await admin.from("units").select("id,unit_name,building_id").in("building_id", buildingIds)
       : { data: [] };
 
     const unitByBuildingAndName = new Map<string, string>();
@@ -87,30 +118,27 @@ export async function POST(request: Request) {
       unitByBuildingAndName.set(`${row.building_id}::${row.unit_name.trim().toLowerCase()}`, row.id);
     }
 
-    const { data: allProfiles } = await admin.from("profiles").select("id,email,role");
-    const profileByEmail = new Map<string, string>();
-    for (const p of allProfiles ?? []) {
-      const email = ((p as { email: string }).email ?? "").trim().toLowerCase();
-      if (email) profileByEmail.set(email, (p as { id: string }).id);
-    }
-
-    const ownerCache = new Map<string, string>();
-    let ownersCreated = 0;
-
     let created = 0;
     let updated = 0;
+    let ownersCreated = 0;
+    let buildingsCreated = 0;
     const skipped: string[] = [];
     const warnings: string[] = [];
 
-    for (const row of parsed) {
+    for (let rowIndex = 0; rowIndex < parsed.length; rowIndex++) {
+      const row = parsed[rowIndex];
       const label = `${row.building} / ${row.unit_name}`;
-      const buildingId = buildingByName.get(row.building.trim().toLowerCase());
+      let buildingId = buildingByName.get(normBuildingName(row.building));
       if (!buildingId) {
-        skipped.push(`${label} (building not found)`);
+        buildingId = (await ensureBuilding(admin, siteId, row.building, buildingByName)) ?? undefined;
+        if (buildingId) buildingsCreated++;
+      }
+      if (!buildingId) {
+        skipped.push(`${label} (building not found: ${row.building})`);
         continue;
       }
 
-      const sizeM2 = row.size_m2 ? parseFloat(row.size_m2) : null;
+      const sizeM2 = row.size_m2 ? parseFloat(String(row.size_m2).replace(",", ".")) : null;
       const unitPayload = {
         building_id: buildingId,
         unit_name: row.unit_name.trim(),
@@ -150,13 +178,10 @@ export async function POST(request: Request) {
         const resolved = await findOrCreateSiteOwner(
           admin,
           siteId,
-          {
-            email: ownerEmail,
-            name: ownerName,
-            surname: ownerSurname,
-            phone: ownerPhone,
-          },
-          ownerCache
+          { email: ownerEmail, name: ownerName, surname: ownerSurname, phone: ownerPhone },
+          ownerCache,
+          profileCtx,
+          String(rowIndex + 1)
         );
         if (!resolved.ok) {
           warnings.push(`${label}: ${resolved.error}`);
@@ -171,27 +196,31 @@ export async function POST(request: Request) {
       }
 
       const tenantEmail = row.tenant_email.trim().toLowerCase();
-      const tenantName = row.tenant_name.trim();
-      const tenantSurname = row.tenant_surname.trim();
-      const tenantPhone = row.tenant_phone.trim();
-      const hasTenantInfo = !!(tenantEmail || tenantName || tenantSurname || tenantPhone);
-
-      if (hasTenantInfo) {
-        if (tenantEmail) {
-          const tenantId = profileByEmail.get(tenantEmail);
-          if (!tenantId) {
-            warnings.push(`${label}: tenant email not found (${row.tenant_email})`);
-          } else {
-            try {
-              await assignTenant(admin, unitId, tenantId);
-            } catch (e) {
-              warnings.push(`${label}: tenant assign failed (${e instanceof Error ? e.message : "error"})`);
-            }
-          }
+      if (tenantEmail) {
+        const tenantId = profileCtx.byEmail.get(tenantEmail)?.id;
+        if (!tenantId) {
+          warnings.push(`${label}: tenant email not found (${row.tenant_email})`);
         } else {
-          warnings.push(`${label}: tenant email required to assign tenant`);
+          try {
+            await assignTenant(admin, unitId, tenantId);
+          } catch (e) {
+            warnings.push(`${label}: tenant assign failed (${e instanceof Error ? e.message : "error"})`);
+          }
         }
       }
+    }
+
+    if (created + updated === 0) {
+      return NextResponse.json(
+        {
+          error: skipped.length
+            ? `No units imported. First issues: ${skipped.slice(0, 3).join("; ")}`
+            : "No units imported.",
+          skipped,
+          warnings,
+        },
+        { status: 400 }
+      );
     }
 
     return NextResponse.json({
@@ -199,6 +228,7 @@ export async function POST(request: Request) {
       updated,
       imported: created + updated,
       ownersCreated,
+      buildingsCreated,
       skipped,
       warnings,
     });
