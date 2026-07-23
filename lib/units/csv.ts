@@ -39,7 +39,20 @@ export function unitsToCsv(rows: Partial<Record<UnitsCsvColumn, string | number 
   return [header, ...lines].join("\r\n");
 }
 
-function parseCsvLine(line: string): string[] {
+function detectDelimiter(headerLine: string): string {
+  const tabCount = (headerLine.match(/\t/g) ?? []).length;
+  const commaCount = (headerLine.match(/,/g) ?? []).length;
+  const semiCount = (headerLine.match(/;/g) ?? []).length;
+  if (tabCount > 0 && tabCount >= commaCount && tabCount >= semiCount) return "\t";
+  if (semiCount > commaCount) return ";";
+  return ",";
+}
+
+function parseDelimitedLine(line: string, delimiter: string): string[] {
+  if (delimiter === "\t") {
+    return line.split("\t").map((p) => p.trim());
+  }
+
   const result: string[] = [];
   let current = "";
   let inQuotes = false;
@@ -58,7 +71,7 @@ function parseCsvLine(line: string): string[] {
       }
     } else if (c === '"') {
       inQuotes = true;
-    } else if (c === ",") {
+    } else if (c === delimiter) {
       result.push(current.trim());
       current = "";
     } else {
@@ -69,6 +82,10 @@ function parseCsvLine(line: string): string[] {
   return result;
 }
 
+function normalizeHeaderCell(h: string): string {
+  return h.trim().toLowerCase().replace(/\s+/g, "_");
+}
+
 export function parseUnitsCsv(text: string): UnitsCsvRow[] {
   const lines = text
     .replace(/^\uFEFF/, "")
@@ -77,16 +94,23 @@ export function parseUnitsCsv(text: string): UnitsCsvRow[] {
     .filter((l) => l.length > 0);
   if (lines.length < 2) return [];
 
-  const header = parseCsvLine(lines[0]).map((h) => h.trim().toLowerCase());
+  const delimiter = detectDelimiter(lines[0]);
+  const header = parseDelimitedLine(lines[0], delimiter).map(normalizeHeaderCell);
   const idx = (name: string) => header.indexOf(name);
   const required = ["building", "unit_name", "type"];
   for (const col of required) {
-    if (idx(col) < 0) throw new Error(`CSV missing column: ${col}`);
+    if (idx(col) < 0) {
+      const hint =
+        delimiter === "\t"
+          ? " (looks like tab-separated data — paste from Excel is OK after this fix)"
+          : "";
+      throw new Error(`CSV missing column: ${col}${hint}`);
+    }
   }
 
   const rows: UnitsCsvRow[] = [];
   for (let i = 1; i < lines.length; i++) {
-    const parts = parseCsvLine(lines[i]);
+    const parts = parseDelimitedLine(lines[i], delimiter);
     const get = (name: UnitsCsvColumn) => {
       const j = idx(name);
       return j >= 0 ? (parts[j] ?? "").trim() : "";

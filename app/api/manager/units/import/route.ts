@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireManagerSite } from "@/lib/polls/require-manager-site";
 import { parseUnitsCsv } from "@/lib/units/csv";
+import { findOrCreateSiteOwner } from "@/lib/units/resolve-profile";
 import { replaceOwnerMembership, replaceTenantMembership } from "@/lib/unit-memberships";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
@@ -93,6 +94,9 @@ export async function POST(request: Request) {
       if (email) profileByEmail.set(email, (p as { id: string }).id);
     }
 
+    const ownerCache = new Map<string, string>();
+    let ownersCreated = 0;
+
     let created = 0;
     let updated = 0;
     const skipped: string[] = [];
@@ -137,42 +141,55 @@ export async function POST(request: Request) {
       }
 
       const ownerEmail = row.owner_email.trim().toLowerCase();
-      if (ownerEmail) {
-        const ownerId = profileByEmail.get(ownerEmail);
-        if (!ownerId) {
-          warnings.push(`${label}: owner email not found (${row.owner_email})`);
+      const ownerName = row.owner_name.trim();
+      const ownerSurname = row.owner_surname.trim();
+      const ownerPhone = row.owner_phone.trim();
+      const hasOwnerInfo = !!(ownerEmail || ownerName || ownerSurname || ownerPhone);
+
+      if (hasOwnerInfo) {
+        const resolved = await findOrCreateSiteOwner(
+          admin,
+          siteId,
+          {
+            email: ownerEmail,
+            name: ownerName,
+            surname: ownerSurname,
+            phone: ownerPhone,
+          },
+          ownerCache
+        );
+        if (!resolved.ok) {
+          warnings.push(`${label}: ${resolved.error}`);
         } else {
+          if (resolved.created) ownersCreated++;
           try {
-            await assignOwner(admin, unitId, ownerId);
+            await assignOwner(admin, unitId, resolved.userId);
           } catch (e) {
             warnings.push(`${label}: owner assign failed (${e instanceof Error ? e.message : "error"})`);
           }
         }
-      } else {
-        try {
-          await assignOwner(admin, unitId, null);
-        } catch (e) {
-          warnings.push(`${label}: clear owner failed (${e instanceof Error ? e.message : "error"})`);
-        }
       }
 
       const tenantEmail = row.tenant_email.trim().toLowerCase();
-      if (tenantEmail) {
-        const tenantId = profileByEmail.get(tenantEmail);
-        if (!tenantId) {
-          warnings.push(`${label}: tenant email not found (${row.tenant_email})`);
-        } else {
-          try {
-            await assignTenant(admin, unitId, tenantId);
-          } catch (e) {
-            warnings.push(`${label}: tenant assign failed (${e instanceof Error ? e.message : "error"})`);
+      const tenantName = row.tenant_name.trim();
+      const tenantSurname = row.tenant_surname.trim();
+      const tenantPhone = row.tenant_phone.trim();
+      const hasTenantInfo = !!(tenantEmail || tenantName || tenantSurname || tenantPhone);
+
+      if (hasTenantInfo) {
+        if (tenantEmail) {
+          const tenantId = profileByEmail.get(tenantEmail);
+          if (!tenantId) {
+            warnings.push(`${label}: tenant email not found (${row.tenant_email})`);
+          } else {
+            try {
+              await assignTenant(admin, unitId, tenantId);
+            } catch (e) {
+              warnings.push(`${label}: tenant assign failed (${e instanceof Error ? e.message : "error"})`);
+            }
           }
-        }
-      } else {
-        try {
-          await assignTenant(admin, unitId, null);
-        } catch (e) {
-          warnings.push(`${label}: clear tenant failed (${e instanceof Error ? e.message : "error"})`);
+        } else {
+          warnings.push(`${label}: tenant email required to assign tenant`);
         }
       }
     }
@@ -181,6 +198,7 @@ export async function POST(request: Request) {
       created,
       updated,
       imported: created + updated,
+      ownersCreated,
       skipped,
       warnings,
     });

@@ -430,7 +430,7 @@
     "importFailed": "Import failed.",
     "importSkipped": "Skipped: {rows}",
     "importWarnings": "Warnings: {rows}",
-    "csvHelp": "Export first to get the column template. Required columns: building, unit_name, type. Owner/tenant are matched by email.",
+    "csvHelp": "Paste from Excel (tabs OK) or CSV. Required: building, unit_name, type. Owners matched by email, phone, or name — new owners are created automatically.",
     "csvPlaceholder": "Paste CSV here (include header row)…"
   },
   "configUnitTypes": {
