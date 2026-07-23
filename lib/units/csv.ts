@@ -1,5 +1,4 @@
 export const UNITS_CSV_COLUMNS = [
-  "unit_id",
   "building",
   "unit_name",
   "type",

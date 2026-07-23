@@ -108,7 +108,6 @@ export async function GET(request: Request) {
       const owner = profileFields(profileMap.get(ownerByUnit.get(u.id) ?? ""));
       const tenant = profileFields(profileMap.get(tenantByUnit.get(u.id) ?? ""));
       return {
-        unit_id: u.id,
         building: buildingMap.get(u.building_id) ?? "",
         unit_name: u.unit_name,
         type: u.type,

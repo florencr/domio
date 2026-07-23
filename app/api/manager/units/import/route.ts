@@ -80,11 +80,9 @@ export async function POST(request: Request) {
           .in("building_id", buildingIds)
       : { data: [] };
 
-    const unitById = new Map<string, { id: string; unit_name: string; building_id: string }>();
     const unitByBuildingAndName = new Map<string, string>();
     for (const u of existingUnits ?? []) {
       const row = u as { id: string; unit_name: string; building_id: string };
-      unitById.set(row.id, row);
       unitByBuildingAndName.set(`${row.building_id}::${row.unit_name.trim().toLowerCase()}`, row.id);
     }
 
@@ -119,13 +117,8 @@ export async function POST(request: Request) {
         floor: row.floor.trim() || null,
       };
 
-      let unitId = row.unit_id.trim();
+      let unitId = unitByBuildingAndName.get(`${buildingId}::${row.unit_name.trim().toLowerCase()}`);
       if (unitId) {
-        const existing = unitById.get(unitId);
-        if (!existing || !buildingIds.includes(existing.building_id)) {
-          skipped.push(`${label} (unit_id not found in your site)`);
-          continue;
-        }
         const { error } = await admin.from("units").update(unitPayload).eq("id", unitId);
         if (error) {
           skipped.push(`${label} (${error.message})`);
@@ -133,26 +126,14 @@ export async function POST(request: Request) {
         }
         updated++;
       } else {
-        const existingId = unitByBuildingAndName.get(`${buildingId}::${row.unit_name.trim().toLowerCase()}`);
-        if (existingId) {
-          unitId = existingId;
-          const { error } = await admin.from("units").update(unitPayload).eq("id", unitId);
-          if (error) {
-            skipped.push(`${label} (${error.message})`);
-            continue;
-          }
-          updated++;
-        } else {
-          const { data: inserted, error } = await admin.from("units").insert(unitPayload).select("id").single();
-          if (error || !inserted) {
-            skipped.push(`${label} (${error?.message ?? "insert failed"})`);
-            continue;
-          }
-          unitId = (inserted as { id: string }).id;
-          unitById.set(unitId, { id: unitId, unit_name: unitPayload.unit_name, building_id: buildingId });
-          unitByBuildingAndName.set(`${buildingId}::${row.unit_name.trim().toLowerCase()}`, unitId);
-          created++;
+        const { data: inserted, error } = await admin.from("units").insert(unitPayload).select("id").single();
+        if (error || !inserted) {
+          skipped.push(`${label} (${error?.message ?? "insert failed"})`);
+          continue;
         }
+        unitId = (inserted as { id: string }).id;
+        unitByBuildingAndName.set(`${buildingId}::${row.unit_name.trim().toLowerCase()}`, unitId);
+        created++;
       }
 
       const ownerEmail = row.owner_email.trim().toLowerCase();

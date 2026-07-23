@@ -14,6 +14,7 @@ export default function AdminMaintenancePage() {
   const [msg, setMsg] = useState<{ text: string; ok: boolean }>({ text: "", ok: true });
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [showClearExpensesConfirm, setShowClearExpensesConfirm] = useState(false);
+  const [showClearUnitsResidentsConfirm, setShowClearUnitsResidentsConfirm] = useState(false);
   const [selectedSiteId, setSelectedSiteId] = useState<string>("");
 
   useEffect(() => {
@@ -57,6 +58,27 @@ export default function AdminMaintenancePage() {
     if (res.ok && j.success) {
       setMsg({ text: "Site data cleared. Users kept.", ok: true });
       setSelectedSiteId("");
+      load();
+    } else {
+      setMsg({ text: j.error || "Failed", ok: false });
+    }
+  }
+
+  async function clearUnitsResidents() {
+    setShowClearUnitsResidentsConfirm(false);
+    if (!selectedSiteId) return;
+    setActionLoading(true); setMsg({ text: "", ok: true });
+    const res = await fetch("/api/admin/maintenance", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "clearUnitsResidents", siteId: selectedSiteId }),
+    });
+    const j = await res.json().catch(() => ({}));
+    setActionLoading(false);
+    if (res.ok && j.success) {
+      let text = `Cleared ${j.unitsDeleted ?? 0} units and deleted ${j.usersDeleted ?? 0} resident accounts. Site kept.`;
+      if (j.userErrors?.length) text += ` Some users could not be deleted: ${j.userErrors.slice(0, 2).join("; ")}`;
+      setMsg({ text, ok: !j.userErrors?.length });
       load();
     } else {
       setMsg({ text: j.error || "Failed", ok: false });
@@ -134,6 +156,32 @@ export default function AdminMaintenancePage() {
           </div>
 
           <div className="space-y-2 pt-4 border-t">
+            <p className="font-medium text-sm">Clear units & residents</p>
+            <p className="text-xs text-muted-foreground">Deletes all units, bills, and resident accounts for the selected site. Keeps the site, buildings, unit types, services, and the manager.</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Select value={selectedSiteId || "__none__"} onValueChange={v => setSelectedSiteId(v === "__none__" ? "" : v)}>
+                <SelectTrigger className="w-[220px]">
+                  <SelectValue placeholder="Choose site" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— Choose site —</SelectItem>
+                  {sites.map(s => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={() => setShowClearUnitsResidentsConfirm(true)}
+                disabled={actionLoading || !selectedSiteId || sites.length === 0}
+              >
+                Clear units & residents
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-4 border-t">
             <p className="font-medium text-sm">Clear site data</p>
             <p className="text-xs text-muted-foreground">Deletes one site and its buildings, units, bills, expenses, etc. Keeps profiles (users).</p>
             <div className="flex flex-wrap items-center gap-2">
@@ -167,6 +215,23 @@ export default function AdminMaintenancePage() {
                 <div className="flex gap-2 justify-end">
                   <Button variant="outline" onClick={() => setShowClearExpensesConfirm(false)}>Cancel</Button>
                   <Button variant="destructive" onClick={clearExpenses} disabled={actionLoading}>{actionLoading ? "Clearing..." : "Yes, clear expenses"}</Button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {showClearUnitsResidentsConfirm && selectedSiteId && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+              <div className="bg-background p-6 rounded-lg shadow-lg max-w-md mx-4">
+                <p className="font-semibold mb-2">Clear units and residents?</p>
+                <p className="text-sm text-muted-foreground mb-4">
+                  This will delete all units, unit bills, and resident user accounts for{" "}
+                  <strong>{sites.find(s => s.id === selectedSiteId)?.name ?? "this site"}</strong>.
+                  The site, buildings, unit types, and services stay. You can then import real units from CSV.
+                </p>
+                <div className="flex gap-2 justify-end">
+                  <Button variant="outline" onClick={() => setShowClearUnitsResidentsConfirm(false)}>Cancel</Button>
+                  <Button variant="destructive" onClick={clearUnitsResidents} disabled={actionLoading}>{actionLoading ? "Clearing..." : "Yes, clear units & residents"}</Button>
                 </div>
               </div>
             </div>

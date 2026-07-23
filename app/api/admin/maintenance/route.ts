@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { createClient as createAdminClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { clearSiteUnitsAndResidents } from "@/lib/admin/clear-site-units-residents";
 
 async function requireAdmin() {
   const sb = await createClient();
@@ -80,7 +81,20 @@ export async function POST(request: Request) {
       }
     }
 
-    return NextResponse.json({ error: "Invalid action. Use toggle, clear, or clearExpenses." }, { status: 400 });
+    if (action === "clearUnitsResidents") {
+      const siteId = body.siteId as string | undefined;
+      if (!siteId || typeof siteId !== "string") {
+        return NextResponse.json({ error: "Select a site." }, { status: 400 });
+      }
+      try {
+        const result = await clearSiteUnitsAndResidents(admin, siteId);
+        return NextResponse.json({ success: true, ...result });
+      } catch (err) {
+        return NextResponse.json({ error: err instanceof Error ? err.message : "Clear failed" }, { status: 500 });
+      }
+    }
+
+    return NextResponse.json({ error: "Invalid action. Use toggle, clear, clearExpenses, or clearUnitsResidents." }, { status: 400 });
   } catch (err) {
     return NextResponse.json({ error: err instanceof Error ? err.message : "Unknown error" }, { status: 500 });
   }
