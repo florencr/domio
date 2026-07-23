@@ -31,7 +31,7 @@ export default function ConfigUsersPage() {
   const [assigningUnit, setAssigningUnit] = useState<{ profileId: string } | null>(null);
   const [selectedUnit, setSelectedUnit] = useState("");
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
-  const [editF, setEditF] = useState({ name: "", surname: "", phone: "" });
+  const [editF, setEditF] = useState({ name: "", surname: "", phone: "", email: "" });
   const [assignAsOwner, setAssignAsOwner] = useState(true);
   const [newPassword, setNewPassword] = useState("");
   const [uploadingFor, setUploadingFor] = useState<string | null>(null);
@@ -70,7 +70,7 @@ export default function ConfigUsersPage() {
 
   async function saveEdit() {
     if (!editingUser) return;
-    const res = await fetch("/api/users/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: editingUser.id, name: editF.name, surname: editF.surname, phone: editF.phone }) });
+    const res = await fetch("/api/users/update", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ userId: editingUser.id, name: editF.name, surname: editF.surname, phone: editF.phone, email: editF.email }) });
     const r = await res.json();
     if (r.success) {
       setMsg({ text: "User updated.", ok: true });
@@ -252,7 +252,7 @@ export default function ConfigUsersPage() {
                               setNewPassword("");
                             } else {
                               setEditingUser(p);
-                              setEditF({ name: p.name, surname: p.surname, phone: p.phone ?? "" });
+                              setEditF({ name: p.name, surname: p.surname, phone: p.phone ?? "", email: p.email ?? "" });
                               setAssignAsOwner(true);
                               setNewPassword("");
                               setShowCreate(false);
@@ -289,7 +289,7 @@ export default function ConfigUsersPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div><Label className="text-xs">Name</Label><Input value={editF.name} onChange={e => setEditF({ ...editF, name: e.target.value })} className="h-8 text-sm" /></div>
                     <div><Label className="text-xs">{t(locale, "auth.surname")}</Label><Input value={editF.surname} onChange={e => setEditF({ ...editF, surname: e.target.value })} className="h-8 text-sm" /></div>
-                    <div className="col-span-2"><Label className="text-xs">{t(locale, "common.email")}</Label><Input value={editingUser.email} disabled className="h-8 text-sm bg-muted text-muted-foreground cursor-not-allowed" /></div>
+                    <div className="col-span-2"><Label className="text-xs">{t(locale, "common.email")}</Label><Input type="email" value={editF.email} onChange={e => setEditF({ ...editF, email: e.target.value })} className="h-8 text-sm" /></div>
                     <div className="col-span-2"><Label className="text-xs">{t(locale, "common.phone")}</Label><Input value={editF.phone} onChange={e => setEditF({ ...editF, phone: e.target.value })} className="h-8 text-sm" placeholder="+355..." /></div>
                   </div>
                   <p className="text-xs text-muted-foreground mt-2">{t(locale, "configUsers.rolePerUnitHint")}</p>
