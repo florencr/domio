@@ -418,7 +418,20 @@
     "floor": "Floor",
     "owner": "Owner",
     "tenant": "Tenant",
-    "entr": "Entr."
+    "entr": "Entr.",
+    "exportCsv": "Export CSV",
+    "exporting": "Exporting…",
+    "exportDone": "Units exported to CSV.",
+    "exportFailed": "Export failed.",
+    "importCsv": "Import CSV",
+    "importing": "Importing…",
+    "importButton": "Import units",
+    "importDone": "Import done: {created} created, {updated} updated.",
+    "importFailed": "Import failed.",
+    "importSkipped": "Skipped: {rows}",
+    "importWarnings": "Warnings: {rows}",
+    "csvHelp": "Export first to get the column template. Required columns: building, unit_name, type. Owner/tenant are matched by email.",
+    "csvPlaceholder": "Paste CSV here (include header row)…"
   },
   "configUnitTypes": {
     "unitTypes": "Unit Types",

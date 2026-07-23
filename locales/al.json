@@ -417,7 +417,20 @@
     "floor": "Kati",
     "owner": "Pronari",
     "tenant": "Qiramarrësi",
-    "entr": "Hyr."
+    "entr": "Hyr.",
+    "exportCsv": "Eksporto CSV",
+    "exporting": "Duke eksportuar…",
+    "exportDone": "Njësitë u eksportuan në CSV.",
+    "exportFailed": "Eksportimi dështoi.",
+    "importCsv": "Importo CSV",
+    "importing": "Duke importuar…",
+    "importButton": "Importo njësitë",
+    "importDone": "Importi u krye: {created} të krijuara, {updated} të përditësuara.",
+    "importFailed": "Importi dështoi.",
+    "importSkipped": "U kaluan: {rows}",
+    "importWarnings": "Paralajmërime: {rows}",
+    "csvHelp": "Eksportoni fillimisht për shablonin e kolonave. Kolonat e detyrueshme: building, unit_name, type. Pronari/qiramarrësi lidhen me email.",
+    "csvPlaceholder": "Ngjit CSV këtu (përfshi rreshtin e titullit)…"
   },
   "configUnitTypes": {
     "unitTypes": "Llojet e Njësive",

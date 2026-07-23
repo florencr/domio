@@ -19,6 +19,10 @@ export default function ConfigUnitsPage() {
   const [editingUnit, setEditingUnit] = useState<Unit | null>(null);
   const [editF, setEditF] = useState({ buildingId: "", name: "", type: "", size: "", entrance: "", floor: "", ownerId: "none", tenantId: "none" });
   const [filterBuilding, setFilterBuilding] = useState("all");
+  const [csvText, setCsvText] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importing, setImporting] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const sb = createClient();
   const { locale } = useLocale();
@@ -100,6 +104,67 @@ export default function ConfigUnitsPage() {
     load();
   }
 
+  async function exportCsv() {
+    setExporting(true);
+    try {
+      const q = filterBuilding !== "all" ? `?building_id=${encodeURIComponent(filterBuilding)}` : "";
+      const res = await fetch(`/api/manager/units/export${q}`);
+      if (!res.ok) {
+        const j = await res.json().catch(() => ({}));
+        setMsg({ text: j.error || t(locale, "configUnits.exportFailed"), ok: false });
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `units-export-${new Date().toISOString().slice(0, 10)}.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      setMsg({ text: t(locale, "configUnits.exportDone"), ok: true });
+    } catch {
+      setMsg({ text: t(locale, "configUnits.exportFailed"), ok: false });
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function importCsv(e: React.FormEvent) {
+    e.preventDefault();
+    setImporting(true);
+    try {
+      const res = await fetch("/api/manager/units/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ csv: csvText }),
+      });
+      const json = await res.json();
+      if (!res.ok) {
+        setMsg({ text: json.error || t(locale, "configUnits.importFailed"), ok: false });
+        return;
+      }
+      let text = t(locale, "configUnits.importDone", {
+        created: String(json.created ?? 0),
+        updated: String(json.updated ?? 0),
+      });
+      if (json.skipped?.length) {
+        text += " " + t(locale, "configUnits.importSkipped", { rows: json.skipped.slice(0, 5).join("; ") });
+      }
+      if (json.warnings?.length) {
+        text += " " + t(locale, "configUnits.importWarnings", { rows: json.warnings.slice(0, 3).join("; ") });
+      }
+      setMsg({ text, ok: true });
+      setCsvText("");
+      load();
+    } catch {
+      setMsg({ text: t(locale, "configUnits.importFailed"), ok: false });
+    } finally {
+      setImporting(false);
+    }
+  }
+
   async function del(id: string) {
     const unit = data.units.find(u => u.id === id);
     const { error } = await sb.from("units").delete().eq("id", id);
@@ -140,10 +205,36 @@ export default function ConfigUnitsPage() {
             </SelectContent>
           </Select>
         </div>
-        <Button size="sm" onClick={() => { setShowCreate(!showCreate); setEditingUnit(null); }}>
-          {showCreate ? t(locale, "common.cancel") : t(locale, "configUnits.addUnit")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button size="sm" variant="outline" onClick={exportCsv} disabled={exporting}>
+            {exporting ? t(locale, "configUnits.exporting") : t(locale, "configUnits.exportCsv")}
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => setShowImport(!showImport)}>
+            {showImport ? t(locale, "common.cancel") : t(locale, "configUnits.importCsv")}
+          </Button>
+          <Button size="sm" onClick={() => { setShowCreate(!showCreate); setEditingUnit(null); }}>
+            {showCreate ? t(locale, "common.cancel") : t(locale, "configUnits.addUnit")}
+          </Button>
+        </div>
       </div>
+
+      {showImport && (
+        <div className="border rounded-lg p-4 space-y-2 bg-muted/20">
+          <p className="text-sm font-medium">{t(locale, "configUnits.importCsv")}</p>
+          <p className="text-xs text-muted-foreground">{t(locale, "configUnits.csvHelp")}</p>
+          <form onSubmit={importCsv} className="space-y-2">
+            <textarea
+              className="w-full min-h-[120px] border rounded-md p-2 text-sm bg-background font-mono"
+              value={csvText}
+              onChange={e => setCsvText(e.target.value)}
+              placeholder={t(locale, "configUnits.csvPlaceholder")}
+            />
+            <Button type="submit" size="sm" variant="outline" disabled={importing || !csvText.trim()}>
+              {importing ? t(locale, "configUnits.importing") : t(locale, "configUnits.importButton")}
+            </Button>
+          </form>
+        </div>
+      )}
 
       {showCreate && (
         <div className="border border-green-200 bg-green-50/20 dark:bg-green-950/20 dark:border-green-800 rounded-lg p-4">
